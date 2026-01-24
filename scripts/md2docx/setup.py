@@ -20,6 +20,7 @@ setup(
         "python-frontmatter>=1.1.0",
         "Pygments>=2.17.0",
         "Pillow>=10.0.0",
+        "requests>=2.25.0",
     ],
     entry_points={
         "console_scripts": [
