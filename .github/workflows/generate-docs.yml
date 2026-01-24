@@ -34,8 +34,7 @@ jobs:
 
       - name: Generate DOCX files
         run: |
-          cd scripts/md2docx
-          python -m md2docx.cli --config ../../docs/conversion_config.json
+          md2docx --config docs/conversion_config.json
 
       - name: Create build artifacts directory
         run: |
