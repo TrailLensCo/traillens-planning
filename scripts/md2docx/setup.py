@@ -11,7 +11,8 @@ setup(
     description="Convert Markdown files to Word (DOCX) documents",
     author="TrailLens Development Team",
     python_requires=">=3.9",
-    packages=find_packages(exclude=["tests", "docs", "examples"]),
+    packages=["md2docx", "md2docx.diagrams", "md2docx.elements"],
+    package_dir={"md2docx": "."},
     install_requires=[
         "python-docx>=1.1.0",
         "markdown-it-py>=3.0.0",
