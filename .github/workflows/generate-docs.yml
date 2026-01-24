@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
-          cd scripts/md2docx && pip install -e .
+          pip install -e scripts/md2docx
 
       - name: Generate DOCX files
         run: |
