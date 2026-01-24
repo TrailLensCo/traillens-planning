@@ -1,0 +1,12 @@
+# Python dependencies for md2docx and md2pptx converters
+
+# Core dependencies for md2docx
+python-docx>=1.1.0
+markdown-it-py>=3.0.0
+mdit-py-plugins>=0.4.0
+python-frontmatter>=1.1.0
+Pygments>=2.17.0
+Pillow>=10.0.0
+
+# Core dependencies for md2pptx
+python-pptx>=0.6.21
