@@ -68,12 +68,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload DOCX files to Google Drive
-        uses: Jumbo810/upload-to-googledrive@v2.3.3
+        uses: Jumbo810/Upload_Github_Artifacts_TO_GDrive@v2.3.3
         with:
           credentials: ${{ secrets.GOOGLE_DRIVE_CREDENTIALS }}
-          folderId: 1Fzqx106YRBLJw9y8vrVFJjat_amsLY6F
-          filename: build/*.docx
-          overwrite: true
+          parent_folder_id: 1Fzqx106YRBLJw9y8vrVFJjat_amsLY6F
+          target: build/*.docx
+          replace_mode: update_in_place
 
       - name: Summary
         run: |
