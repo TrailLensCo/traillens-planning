@@ -67,6 +67,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload DOCX files to Google Drive
+        uses: Jumbo810/upload-to-googledrive@v2.3.3
+        with:
+          credentials: ${{ secrets.GOOGLE_DRIVE_CREDENTIALS }}
+          folderId: 1Fzqx106YRBLJw9y8vrVFJjat_amsLY6F
+          filename: build/*.docx
+          overwrite: true
+
       - name: Summary
         run: |
           echo "## Documentation Generated" >> $GITHUB_STEP_SUMMARY
@@ -77,3 +85,6 @@ jobs:
           find build -name "*.docx" -exec basename {} \; | while read file; do
             echo "- $file" >> $GITHUB_STEP_SUMMARY
           done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Uploaded to Google Drive:" >> $GITHUB_STEP_SUMMARY
+          echo "Folder ID: 1Fzqx106YRBLJw9y8vrVFJjat_amsLY6F" >> $GITHUB_STEP_SUMMARY
