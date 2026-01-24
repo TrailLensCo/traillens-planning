@@ -50,7 +50,8 @@ Examples:
     parser.add_argument(
         "input",
         type=Path,
-        help="Input markdown file or directory (with --batch)",
+        nargs='?',
+        help="Input markdown file or directory (with --batch), or omit when using --config",
     )
 
     parser.add_argument(
@@ -210,7 +211,10 @@ def main(args: Optional[list[str]] = None) -> int:
 
     # Validate input
     input_path = parsed_args.input
-    if not input_path.exists():
+    if not parsed_args.config and not input_path:
+        logger.error("Either input file or --config must be provided")
+        return 1
+    if input_path and not input_path.exists():
         logger.error(f"Input not found: {input_path}")
         return 1
 
