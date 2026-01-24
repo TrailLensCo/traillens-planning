@@ -250,10 +250,6 @@ def main(args: Optional[list[str]] = None) -> int:
                 source_path = Path(source_file)
                 output_path = Path(file_config['docx'])
 
-                # Make source path absolute if relative
-                if not source_path.is_absolute():
-                    source_path = config_path.parent / source_path
-
                 if not source_path.exists():
                     errors.append(f"Source not found: {source_path}")
                     continue
