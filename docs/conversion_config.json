@@ -1,177 +1,59 @@
 {
   "docs/AUTH_REPORT.md": {
-    "docx": "build/AUTH_REPORT.docx",
-    "md5": "846f284214a592b1a82539a0ed989fe5",
-    "source": "docs/AUTH_REPORT.md"
+    "docx": "build/AUTH_REPORT.docx"
   },
   "docs/BUSINESS_PLAN.md": {
-    "docx": "build/BUSINESS_PLAN.docx",
-    "md5": "d953bcffe0b19d021422361eec61368c",
-    "source": "docs/BUSINESS_PLAN.md"
+    "docx": "build/BUSINESS_PLAN.docx"
   },
   "docs/BUSINESS_PLAN_OUTLINE.md": {
-    "docx": "build/BUSINESS_PLAN_OUTLINE.docx",
-    "md5": "511bf6b5540e2c530fb61457f4fafa32",
-    "source": "docs/BUSINESS_PLAN_OUTLINE.md"
+    "docx": "build/BUSINESS_PLAN_OUTLINE.docx"
   },
   "docs/BUSINESS_PLAN_PRESENTATION_OUTLINE.md": {
-    "docx": "build/BUSINESS_PLAN_PRESENTATION_OUTLINE.docx",
-    "md5": "98ea94572dbb59843167927b5a8c4a41",
-    "source": "docs/BUSINESS_PLAN_PRESENTATION_OUTLINE.md"
+    "docx": "build/BUSINESS_PLAN_PRESENTATION_OUTLINE.docx"
   },
   "docs/COST_ANALYSIS_DETAILED.md": {
-    "docx": "build/COST_ANALYSIS_DETAILED.docx",
-    "md5": "45e9d3e94b1566910ae34578c219cf53",
-    "source": "docs/COST_ANALYSIS_DETAILED.md"
+    "docx": "build/COST_ANALYSIS_DETAILED.docx"
   },
   "docs/EXECUTIVE_OVERVIEW.md": {
-    "docx": "build/EXECUTIVE_OVERVIEW.docx",
-    "md5": "f60cb5a32ba70a008636fa5dff9dde70",
-    "source": "docs/EXECUTIVE_OVERVIEW.md"
+    "docx": "build/EXECUTIVE_OVERVIEW.docx"
   },
   "docs/EXECUTIVE_OVERVIEW_OUTLINE.md": {
-    "docx": "build/EXECUTIVE_OVERVIEW_OUTLINE.docx",
-    "md5": "50d59ee42c06fe4c31188d631b92e6fa",
-    "source": "docs/EXECUTIVE_OVERVIEW_OUTLINE.md"
+    "docx": "build/EXECUTIVE_OVERVIEW_OUTLINE.docx"
   },
   "docs/EXECUTIVE_SUMMARY_PLAN.md": {
-    "docx": "build/EXECUTIVE_SUMMARY_PLAN.docx",
-    "md5": "b5c6d7eeda9bf3c75089e3e3a4943fad",
-    "source": "docs/EXECUTIVE_SUMMARY_PLAN.md"
+    "docx": "build/EXECUTIVE_SUMMARY_PLAN.docx"
   },
   "docs/FINANCIAL_PLAN.md": {
-    "docx": "build/FINANCIAL_PLAN.docx",
-    "md5": "1b7f180543a774f6518b54949a5a8ac3",
-    "source": "docs/FINANCIAL_PLAN.md"
+    "docx": "build/FINANCIAL_PLAN.docx"
   },
   "docs/MARKETING_PLAN.md": {
-    "docx": "build/MARKETING_PLAN.docx",
-    "md5": "d2840dfc3d87d66baf152eba617496c0",
-    "source": "docs/MARKETING_PLAN.md"
+    "docx": "build/MARKETING_PLAN.docx"
   },
   "docs/MARKET_ANALYSIS_COMPREHENSIVE.md": {
-    "docx": "build/MARKET_ANALYSIS_COMPREHENSIVE.docx",
-    "md5": "55c246d6a983c25f4ac0a787af49b990",
-    "source": "docs/MARKET_ANALYSIS_COMPREHENSIVE.md"
+    "docx": "build/MARKET_ANALYSIS_COMPREHENSIVE.docx"
   },
   "docs/MVP_PROJECT_PLAN.md": {
-    "docx": "build/MVP_PROJECT_PLAN.docx",
-    "md5": "e62dc50708410b0bcb13774cd563b41f",
-    "source": "docs/MVP_PROJECT_PLAN.md"
+    "docx": "build/MVP_PROJECT_PLAN.docx"
   },
   "docs/PRODUCT_OVERVIEW_FOR_CEO.md": {
-    "docx": "build/PRODUCT_OVERVIEW_FOR_CEO.docx",
-    "md5": "ca9912446fdb8a831eac0fee983be89a",
-    "source": "docs/PRODUCT_OVERVIEW_FOR_CEO.md"
+    "docx": "build/PRODUCT_OVERVIEW_FOR_CEO.docx"
   },
   "docs/PRODUCT_REVENUE_ANALYSIS_DETAILED.md": {
-    "docx": "build/PRODUCT_REVENUE_ANALYSIS_DETAILED.docx",
-    "md5": "f07b698c4d638b7dbdb4281a3d29560f",
-    "source": "docs/PRODUCT_REVENUE_ANALYSIS_DETAILED.md"
+    "docx": "build/PRODUCT_REVENUE_ANALYSIS_DETAILED.docx"
   },
   "docs/PRODUCT_REVENUE_ANALYSIS_SUMMARY.md": {
-    "docx": "build/PRODUCT_REVENUE_ANALYSIS_SUMMARY.docx",
-    "md5": "e53c08448a6ff0dfbc6b58c576f8d6e0",
-    "source": "docs/PRODUCT_REVENUE_ANALYSIS_SUMMARY.md"
+    "docx": "build/PRODUCT_REVENUE_ANALYSIS_SUMMARY.docx"
   },
   "docs/SECURITY_REPORT_FOR_CEO.md": {
-    "docx": "build/SECURITY_REPORT_FOR_CEO.docx",
-    "md5": "fb8eb7dcdbb280750706bd62d3797e7a",
-    "source": "docs/SECURITY_REPORT_FOR_CEO.md"
+    "docx": "build/SECURITY_REPORT_FOR_CEO.docx"
   },
   "docs/SYSTEM_ARCHITECTURE.md": {
-    "docx": "build/SYSTEM_ARCHITECTURE.docx",
-    "md5": "27b46fd929059aadb90e8c8de8afb979",
-    "source": "docs/SYSTEM_ARCHITECTURE.md"
+    "docx": "build/SYSTEM_ARCHITECTURE.docx"
   },
   "docs/WEBSITE_CONTENT_UPDATES_MVP.md": {
-    "docx": "build/WEBSITE_CONTENT_UPDATES_MVP.docx",
-    "md5": "4d22ab8d6a03bcece1d7443c72f8143e",
-    "source": "docs/WEBSITE_CONTENT_UPDATES_MVP.md"
-  },
-  "docs/backup/COST_ANALYSIS_DETAILED_v1.md": {
-    "docx": "build/backup/COST_ANALYSIS_DETAILED_v1.docx",
-    "md5": "ad4d15e9624c3f8c2eee8fbdf45291a1",
-    "source": "docs/backup/COST_ANALYSIS_DETAILED_v1.md"
-  },
-  "docs/backup/MARKETING_PLAN_v1.md": {
-    "docx": "build/backup/MARKETING_PLAN_v1.docx",
-    "md5": "946808487c0d21c8aca22dc7e820e8de",
-    "source": "docs/backup/MARKETING_PLAN_v1.md"
-  },
-  "docs/backup/MARKETING_PLAN_v2.md": {
-    "docx": "build/backup/MARKETING_PLAN_v2.docx",
-    "md5": "946808487c0d21c8aca22dc7e820e8de",
-    "source": "docs/backup/MARKETING_PLAN_v2.md"
-  },
-  "docs/backup/MARKET_ANALYSIS_COMPREHENSIVE_v1.md": {
-    "docx": "build/backup/MARKET_ANALYSIS_COMPREHENSIVE_v1.docx",
-    "md5": "1f97bbf5342c0eb2f006fa1e6ba40912",
-    "source": "docs/backup/MARKET_ANALYSIS_COMPREHENSIVE_v1.md"
-  },
-  "docs/backup/MVP_PROJECT_PLAN_v1.md": {
-    "docx": "build/backup/MVP_PROJECT_PLAN_v1.docx",
-    "md5": "cbc1a5e0a0c2fc78b05b152e24a27b02",
-    "source": "docs/backup/MVP_PROJECT_PLAN_v1.md"
-  },
-  "docs/backup/MVP_PROJECT_PLAN_v2.md": {
-    "docx": "build/backup/MVP_PROJECT_PLAN_v2.docx",
-    "md5": "76191a9c9085a8e18001cdf2039954ff",
-    "source": "docs/backup/MVP_PROJECT_PLAN_v2.md"
-  },
-  "docs/backup/MVP_PROJECT_PLAN_v3.md": {
-    "docx": "build/backup/MVP_PROJECT_PLAN_v3.docx",
-    "md5": "e407d19e201eed9f61cab356fc27db52",
-    "source": "docs/backup/MVP_PROJECT_PLAN_v3.md"
-  },
-  "docs/backup/MVP_PROJECT_PLAN_v4.md": {
-    "docx": "build/backup/MVP_PROJECT_PLAN_v4.docx",
-    "md5": "1b1f7822b36e49d6178365c252a6a078",
-    "source": "docs/backup/MVP_PROJECT_PLAN_v4.md"
-  },
-  "docs/backup/PRODUCT_OVERVIEW_FOR_CEO_v1.md": {
-    "docx": "build/backup/PRODUCT_OVERVIEW_FOR_CEO_v1.docx",
-    "md5": "9cafe256029fde088667f931242623e1",
-    "source": "docs/backup/PRODUCT_OVERVIEW_FOR_CEO_v1.md"
-  },
-  "docs/backup/PRODUCT_OVERVIEW_FOR_CEO_v2.md": {
-    "docx": "build/backup/PRODUCT_OVERVIEW_FOR_CEO_v2.docx",
-    "md5": "c753d9fedcb62fed911bf30434011254",
-    "source": "docs/backup/PRODUCT_OVERVIEW_FOR_CEO_v2.md"
-  },
-  "docs/backup/PRODUCT_REVENUE_ANALYSIS_DETAILED_v1.md": {
-    "docx": "build/backup/PRODUCT_REVENUE_ANALYSIS_DETAILED_v1.docx",
-    "md5": "55bcd275d2911c743bda5060e4fb7c50",
-    "source": "docs/backup/PRODUCT_REVENUE_ANALYSIS_DETAILED_v1.md"
-  },
-  "docs/backup/SECURITY_REPORT_FOR_CEO_v1.md": {
-    "docx": "build/backup/SECURITY_REPORT_FOR_CEO_v1.docx",
-    "md5": "aa2f70effea98f055435265b1191f5fb",
-    "source": "docs/backup/SECURITY_REPORT_FOR_CEO_v1.md"
-  },
-  "docs/backup/SECURITY_REPORT_FOR_CEO_v2.md": {
-    "docx": "build/backup/SECURITY_REPORT_FOR_CEO_v2.docx",
-    "md5": "aa2f70effea98f055435265b1191f5fb",
-    "source": "docs/backup/SECURITY_REPORT_FOR_CEO_v2.md"
-  },
-  "docs/backup/SYSTEM_ARCHITECTURE_v1.md": {
-    "docx": "build/backup/SYSTEM_ARCHITECTURE_v1.docx",
-    "md5": "f35be7640a33ef0d30f283d9dedd6f0d",
-    "source": "docs/backup/SYSTEM_ARCHITECTURE_v1.md"
-  },
-  "docs/backup/SYSTEM_ARCHITECTURE_v2.md": {
-    "docx": "build/backup/SYSTEM_ARCHITECTURE_v2.docx",
-    "md5": "6c6cf9a1ddeabf3845f55ef0c7bcd842",
-    "source": "docs/backup/SYSTEM_ARCHITECTURE_v2.md"
-  },
-  "docs/backup/SYSTEM_ARCHITECTURE_v3.md": {
-    "docx": "build/backup/SYSTEM_ARCHITECTURE_v3.docx",
-    "md5": "4a6213fc57176e13e12be16a28c720e2",
-    "source": "docs/backup/SYSTEM_ARCHITECTURE_v3.md"
+    "docx": "build/WEBSITE_CONTENT_UPDATES_MVP.docx"
   },
   "docs/mvp-implementation-todo.md": {
-    "docx": "build/mvp-implementation-todo.docx",
-    "md5": "d67f1d407be19c9537f4bf76dac90ccd",
-    "source": "docs/mvp-implementation-todo.md"
+    "docx": "build/mvp-implementation-todo.docx"
   }
 }
