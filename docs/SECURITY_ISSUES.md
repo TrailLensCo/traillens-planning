@@ -80,6 +80,7 @@ regexes, vulnerable and secure code examples, and references to CWE and OWASP cl
 | SEC-ERR-005 | MEDIUM | Error Handling | Bare Except Swallowing Errors |
 | SEC-ERR-006 | CRITICAL | Error Handling | Python 2 Except Syntax |
 | SEC-ERR-007 | MEDIUM | Error Handling | Exception Re-wrapping Loses Subclass Info |
+| SEC-ERR-008 | HIGH | Error Handling | Unimplemented Protocol Method via Cast or Stub |
 | SEC-API-001 | HIGH | API Security | Missing Rate Limiting |
 | SEC-API-002 | HIGH | API Security | Excessive Data Exposure |
 | SEC-API-003 | MEDIUM | API Security | Missing Request Size Limits |
@@ -3837,6 +3838,50 @@ except JWTError:
 except Exception as e:
     # Wrap non-JWT exceptions into JWTError for consistent caller handling
     raise JWTError(str(e)) from e
+```
+
+---
+
+### SEC-ERR-008: Unimplemented Protocol Method via Cast or Stub
+
+- **Severity:** HIGH
+- **Category:** Error Handling
+- **Description:** Code references a method via `typing.cast()` to a Protocol, `getattr()` runtime guard, or dependency-injected callable that returns `[]` as a placeholder. The underlying concrete class does not implement the method. This causes `AttributeError` at runtime, silent feature failures (empty results), or `NotImplementedError`.
+- **Detection Regex:** `cast\(.*Protocol` or `getattr\(.*,\s*None\)` followed by `callable` or `return \[\]` with comments like "placeholder" or "not yet implemented"
+- **Impact:** Features silently return empty results or crash at runtime when Protocol-cast or stub methods are invoked on concrete classes that lack the implementation.
+- **CWE:** CWE-691 (Insufficient Control Flow Management)
+- **OWASP:** A04:2021 - Insecure Design
+
+**Vulnerable Pattern:**
+
+```python
+from typing import cast, Protocol
+
+class NotificationProtocol(Protocol):
+    def get_subscribers(self, trailsystem_id: str) -> list[str]: ...
+
+# VULNERABLE: ConcreteRepo does not implement get_subscribers
+repo = ConcreteRepo(table)
+notifier = cast(NotificationProtocol, repo)
+subscribers = notifier.get_subscribers("ts-123")  # AttributeError at runtime
+```
+
+**Secure Pattern:**
+
+```python
+from typing import Protocol
+
+class NotificationProtocol(Protocol):
+    def get_subscribers(self, trailsystem_id: str) -> list[str]: ...
+
+class ConcreteRepo:
+    # SECURE: Method is actually implemented on the concrete class
+    def get_subscribers(self, trailsystem_id: str) -> list[str]:
+        response = self._table.query(
+            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues={":pk": f"TRAILSUB#{trailsystem_id}", ":sk": "USER#"},
+        )
+        return [item["SK"].split("#", 1)[1] for item in response.get("Items", [])]
 ```
 
 ---
