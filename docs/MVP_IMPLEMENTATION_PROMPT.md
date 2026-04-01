@@ -1082,6 +1082,467 @@ Trail care reports follow a status-based retention policy that balances historic
 
 ---
 
+### 8. TrailPulse - Trail Feedback and Usage Tracking
+
+**TrailPulse** is a privacy-first trail feedback and usage tracking system that enables trail system owners to gather rider feedback and track trail usage through GPS-based ride detection.
+
+#### Feature Overview
+
+TrailPulse transforms trail system management by providing software-based trail counting and real-time condition feedback from the riding community. The system uses GPS technology to detect when users visit subscribed trail systems, prompting them for post-ride feedback while maintaining strict privacy controls.
+
+**What it does:**
+- Automatically detects trail system visits via GPS geofencing
+- Prompts users for post-ride feedback on trail conditions
+- Tracks trail system usage counts (replaces hardware counters)
+- Provides trail system owners with actionable feedback data
+
+**Why it matters:**
+- **Software-based counting**: Eliminates need for expensive hardware trail counters
+- **Community-driven conditions**: Real-time feedback from actual riders
+- **Data-driven decisions**: Trail system owners can prioritize maintenance based on user feedback
+
+**Key benefits:**
+- **Privacy-first design**: Only tracks within subscribed trail systems, easy opt-out available
+- **Subscription-based**: Users must subscribe to a trail system before any tracking occurs
+- **Rider-focused**: Quick, simple feedback collection (< 30 seconds)
+- **Cost-effective**: No hardware infrastructure required
+
+#### 8.1 Mobile App - GPS Tracking and Ride Detection
+
+**Mobile Team Implementation** (separate mobile repository handles all GPS functionality)
+
+**Location Tracking (R1.1)**
+
+GPS tracking operates ONLY within subscribed trail systems:
+- Geofencing detects trail system entry/exit
+- No tracking outside subscribed boundaries
+- Default: GPS tracking enabled (but only within subscribed systems)
+- User opt-out available in preferences
+- Users who opt out are not tracked (usage still counted via other means if possible)
+
+**Privacy Controls (R1.2)**
+
+Clear privacy protections and user control:
+- User consent during onboarding about location tracking
+- Visible indicator when GPS tracking is active
+- Easy access to disable tracking in settings
+- No location data stored outside subscribed trail systems
+- No individual route tracking (only entry/exit and usage count)
+
+**Ride Detection (R1.3)**
+
+Automated detection of trail system visits:
+- Detect user entry into subscribed trail system
+- Detect user exit from subscribed trail system
+- Calculate ride duration (entry to exit time)
+- Increment usage count for user and trail system
+- Handle edge cases (app backgrounded, GPS signal loss, etc.)
+
+**Post-Ride Notification (R1.4)**
+
+Push notification triggers feedback collection:
+- Send push notification when user exits trail system
+- Notification content: "How were the trails today?" (customizable by trail owner)
+- Deeplink to feedback form in app
+- Allow user to dismiss or complete feedback
+- Respect notification preferences (DND, quiet hours)
+
+#### 8.2 Post-Ride Feedback Collection
+
+**Trail Condition Feedback - Every Ride (R2.1)**
+
+Simple, quick condition reporting:
+- Present trail condition options configured by trail system owner
+- Default conditions: Dry, Muddy, Wet, Icy, Snowy, Rocky, Dusty
+- Single or multiple selection based on owner configuration
+- Optional free-text comment field
+- Quick submit (< 30 seconds to complete)
+
+**Additional Questions - Configurable Frequency (R2.2)**
+
+Customizable questions asked periodically:
+- Trail system owner defines additional questions
+- Owner sets frequency threshold (e.g., every 10 rides)
+- Question types supported:
+  - Multiple choice
+  - Rating scale (1-5 stars)
+  - Yes/No
+  - Free text
+- Track question response count to determine when to ask next
+
+**Web Interface Feedback (R2.3)**
+
+Manual feedback submission via web:
+- Login required (authenticated users only)
+- Manual feedback submission (not tied to GPS ride detection)
+- Select trail system from subscribed list
+- Same question flow as mobile app
+- Timestamp and user ID recorded
+
+#### 8.3 Trail System Owner Configuration
+
+**Condition Configuration (R3.1)**
+
+Customize trail condition tracking:
+- Define list of trail conditions to track
+- Set condition types (single vs. multiple selection)
+- Enable/disable condition tracking
+- Preview how conditions appear to users
+
+**Additional Questions Configuration (R3.2)**
+
+Create custom feedback questions:
+- Create custom questions
+- Set question type (multiple choice, rating, yes/no, text)
+- Define response options for multiple choice
+- Set frequency threshold (e.g., ask every N rides)
+- Enable/disable specific questions
+- Reorder questions
+
+**Notification Customization (R3.3)**
+
+Configure post-ride notifications:
+- Customize exit notification message
+- Set notification timing (immediate, 5 min delay, etc.)
+- Enable/disable notifications
+
+#### 8.4 Feedback Data Management Interface
+
+**Feedback Data Viewing (R4.1)**
+
+Comprehensive feedback viewing for trail admins:
+- View all feedback responses for their trail system(s)
+- Display feedback in table/list format with key columns:
+  - Date/time of ride
+  - User identification (name, email, or anonymous ID)
+  - Trail conditions reported
+  - Responses to additional questions
+  - Free-text comments
+  - User metadata (crew member status, feedback count)
+- Paginated results for large datasets
+- Default sort by most recent first
+- Visual indicators for different condition types
+- Expandable rows for detailed view
+
+**Search and Filter Capabilities (R4.2)**
+
+Comprehensive filtering for feedback analysis:
+- **Date Range Filter**: Filter feedback by date range (last 7 days, last 30 days, custom range)
+- **Condition Filter**: Filter by specific trail conditions (e.g., show only "Muddy" reports)
+- **User Filter**: Filter by specific user or user type (crew members, regular users, frequent reporters)
+- **Question Filter**: Filter by responses to specific additional questions
+- **Text Search**: Search within free-text comments
+- **Feedback Count Filter**: Show users who have submitted N+ feedback entries
+- **Combined Filters**: Apply multiple filters simultaneously
+- **Save Filter Presets**: Save commonly used filter combinations
+
+**Feedback Management (R4.3)**
+
+Data quality and relevance management:
+- **Delete Single Feedback**: Remove individual feedback entry with confirmation
+- **Bulk Delete**: Select multiple feedback entries and delete together
+- **Delete by Filter**: Delete all feedback matching current filter criteria (with confirmation)
+- **Soft Delete Option**: Mark feedback as deleted without permanent removal (for audit trail)
+- **Deletion Reason**: Optional field to note why feedback was deleted
+- **Deletion Audit Log**: Track who deleted what and when
+
+**User Feedback Statistics (R4.4)**
+
+Aggregate user statistics for pattern identification:
+- **User Feedback Count**: Total number of feedback submissions per user
+- **Crew Member Identification**: Visual badge or indicator for trail crew members
+- **Feedback Frequency**: Average time between feedback submissions per user
+- **Most Active Contributors**: Leaderboard or list of top feedback providers
+- **User Feedback History**: Click user to see all their feedback submissions
+- **Reliability Score**: Optional metric based on feedback consistency (post-MVP)
+
+**Data Usage for Trail Condition Management (R4.5)**
+
+Integration with trail condition workflow:
+- **Quick Condition Update**: Set trail condition based on recent feedback with one click
+- **Feedback Summary View**: Aggregate view showing condition distribution (e.g., "70% reported Muddy")
+- **Suggested Conditions**: System suggests trail condition based on recent feedback patterns
+- **Feedback Context**: When setting conditions manually, show recent feedback as reference
+- **Decision Support**: Show trend of conditions over past week/month
+
+**Crew Member Management (R4.6)**
+
+Track and manage crew member status:
+- **Crew Member Flag**: Admin can mark users as crew members
+- **Crew Feedback Weighting**: Option to give more visibility to crew member feedback
+- **Crew Activity Tracking**: See which crew members are actively providing feedback
+- **Bulk Crew Assignment**: Add/remove crew status for multiple users
+- **Crew Member Notes**: Add notes about crew members (roles, responsibilities)
+
+#### 8.5 Trail System Geofence Management
+
+**Geofence Data Model (R5.1)**
+
+Trail system boundary definitions:
+- Store trail system boundary coordinates in DynamoDB
+- Support GeoJSON format or simple polygon coordinates
+- Each trail system must have defined boundaries for ride detection
+- Boundaries define where GPS tracking is active
+
+**Admin Interface for Geofences (R5.2)**
+
+Geofence management UI:
+- Trail system owners can define/edit geofence boundaries
+- Map-based interface for drawing boundaries (or coordinate input)
+- Preview geofence coverage on map
+- Validate boundary data (closed polygon, reasonable size)
+
+**API for Geofence Data (R5.3)**
+
+Mobile app geofence retrieval:
+- Mobile app retrieves geofence boundaries for subscribed trail systems
+- Efficient boundary queries (don't send all geofences, only subscribed)
+- Cache geofence data on mobile device
+- Update geofences when trail system boundaries change
+
+**Geofence Validation (R5.4)**
+
+Backend validation and security:
+- Backend validates ride start/end coordinates are within geofence
+- Prevent false positives from GPS drift
+- Reject ride events from non-subscribed trail systems
+- Log geofence violations for debugging
+
+#### 8.6 Usage Counting System
+
+**Trail Usage Metrics (R6.1)**
+
+Comprehensive usage tracking:
+- Count total rides for each trail system (all users combined)
+- Count rides per user per trail system
+- Store counts with timestamp for trend analysis
+- No personally identifiable route data stored
+- Aggregate counts visible to trail system owners
+
+**Count Accuracy (R6.2)**
+
+Accurate usage counting:
+- Count users who opt out of GPS (if app is open during ride)
+- Deduplicate multiple entries/exits within short time window
+- Handle offline scenarios (sync counts when connection restored)
+
+**Reporting for Trail Owners (R6.3)**
+
+Usage analytics and reporting:
+- Daily/weekly/monthly usage counts
+- Trend graphs over time
+- Export usage data (CSV)
+- Software-based alternative to hardware trail counters
+
+#### 8.7 Data Model
+
+**Database Schema (R7.1)**
+
+TrailPulse DynamoDB tables:
+- **TrailConditions**: condition options per trail system
+- **AdditionalQuestions**: custom questions per trail system
+- **RideEvents**: entry/exit timestamps, user, trail system (TTL: 90 days)
+- **FeedbackResponses**: user responses to conditions and questions (includes soft_delete flag, deleted_at, deleted_by, deletion_reason)
+- **UsageCounts**: aggregated ride counts per trail system
+- **UserPreferences**: GPS opt-out, notification settings
+- **QuestionResponseTracker**: count responses to trigger frequency logic
+- **TrailSystemGeofences**: boundary coordinates for each trail system (GeoJSON or polygon)
+- **CrewMembers**: user_id, trail_system_id, is_crew flag, crew_notes, assigned_at, assigned_by
+- **FeedbackDeletionAudit**: audit log for deleted feedback (feedback_id, deleted_at, deleted_by, deletion_reason, was_soft_delete)
+
+**Data Retention (R7.2)**
+
+TrailPulse data retention policy:
+- **Individual ride events**: 90 days (use DynamoDB TTL for automatic deletion)
+- **Aggregated usage counts**: indefinite
+- **Feedback responses**: indefinite
+- **User preferences**: until account deletion
+- **Geofence boundary data**: indefinite (part of trail system configuration)
+
+#### 8.8 Push Notification Integration
+
+**SNS Mobile Integration (R8.1)**
+
+Extend SNS infrastructure for TrailPulse:
+- Extend existing SNS infrastructure for mobile push notifications
+- Mobile team will provide device tokens for registered users
+- Backend stores device tokens in DynamoDB (UserPreferences or separate table)
+- Send post-ride notification via SNS to user's registered device(s)
+
+**Notification Triggers (R8.2)**
+
+Configure notification sending:
+- Trigger notification when ride end event is recorded
+- Include trail system name and feedback link in notification payload
+- Respect user notification preferences (can opt out of feedback notifications)
+- Handle notification failures gracefully (log but don't block ride recording)
+
+**Notification Content (R8.3)**
+
+Notification message format:
+- Default message: "How were the trails at [Trail System Name] today?"
+- Trail owners can customize notification message (optional)
+- Include deeplink to feedback form: `traillens://feedback/{ride_id}`
+- 24-hour expiration for feedback link
+
+#### 8.9 API Endpoints
+
+**Mobile App Endpoints (R9.1)**
+
+Endpoints for mobile app integration (8 endpoints):
+- `POST /api/trailpulse/rides/start` - Record ride entry
+- `POST /api/trailpulse/rides/end` - Record ride exit, trigger notification
+- `GET /api/trailpulse/geofences` - Get geofence boundaries for subscribed trail systems
+- `GET /api/trailpulse/trail-systems/{id}/feedback-config` - Get questions for feedback
+- `POST /api/trailpulse/feedback` - Submit feedback response
+- `GET /api/trailpulse/user/ride-count/{trail_system_id}` - Get user ride count
+- `PUT /api/trailpulse/user/preferences` - Update GPS/notification settings
+- `POST /api/trailpulse/device-token` - Register device for push notifications
+
+**Web Endpoints (R9.2)**
+
+Web interface feedback endpoints (2 endpoints):
+- `GET /api/trailpulse/trail-systems/subscribed` - Get user's subscribed trail systems
+- `POST /api/trailpulse/feedback/web` - Submit web-based feedback
+- All endpoints require authentication
+
+**Admin Configuration Endpoints (R9.3)**
+
+Trail system owner configuration endpoints (8 endpoints):
+- `GET /api/trailpulse/admin/trail-systems/{id}/config` - Get current configuration
+- `PUT /api/trailpulse/admin/trail-systems/{id}/conditions` - Update trail conditions
+- `POST /api/trailpulse/admin/trail-systems/{id}/questions` - Create additional question
+- `PUT /api/trailpulse/admin/trail-systems/{id}/questions/{question_id}` - Update question
+- `DELETE /api/trailpulse/admin/trail-systems/{id}/questions/{question_id}` - Delete question
+- `GET /api/trailpulse/admin/trail-systems/{id}/usage` - Get usage statistics
+- `PUT /api/trailpulse/admin/trail-systems/{id}/geofence` - Update geofence boundaries
+- `GET /api/trailpulse/admin/trail-systems/{id}/geofence` - Get geofence boundaries
+
+**Admin Feedback Management Endpoints (R9.4)**
+
+Feedback data viewing, searching, and management endpoints (10 endpoints):
+- `GET /api/trailpulse/admin/trail-systems/{id}/feedback` - Get feedback with pagination and filters
+  - Query params: `page`, `limit`, `start_date`, `end_date`, `condition`, `user_id`, `user_type`, `question_id`, `search_text`, `min_feedback_count`
+- `GET /api/trailpulse/admin/trail-systems/{id}/feedback/{feedback_id}` - Get single feedback detail
+- `DELETE /api/trailpulse/admin/trail-systems/{id}/feedback/{feedback_id}` - Delete single feedback
+  - Body: `{ "reason": "optional deletion reason", "soft_delete": true/false }`
+- `POST /api/trailpulse/admin/trail-systems/{id}/feedback/bulk-delete` - Delete multiple feedback entries
+  - Body: `{ "feedback_ids": [...], "reason": "optional", "soft_delete": true/false }`
+- `POST /api/trailpulse/admin/trail-systems/{id}/feedback/delete-by-filter` - Delete all feedback matching filters
+  - Body: Same filter params as GET endpoint, plus `reason` and `soft_delete`
+- `GET /api/trailpulse/admin/trail-systems/{id}/feedback/statistics` - Get aggregated feedback statistics
+  - Response: condition distribution, user feedback counts, crew member activity, trends
+- `GET /api/trailpulse/admin/trail-systems/{id}/users/{user_id}/feedback` - Get all feedback from specific user
+- `PUT /api/trailpulse/admin/trail-systems/{id}/users/{user_id}/crew-status` - Set user as crew member
+  - Body: `{ "is_crew": true/false, "notes": "optional crew notes" }`
+- `GET /api/trailpulse/admin/trail-systems/{id}/crew-members` - Get list of crew members
+- `POST /api/trailpulse/admin/trail-systems/{id}/crew-members/bulk` - Set crew status for multiple users
+  - Body: `{ "user_ids": [...], "is_crew": true/false }`
+
+#### 8.10 Integration Points
+
+**Existing Systems**
+
+TrailPulse integrates with:
+- **Cognito**: User authentication (both web and mobile)
+- **Subscription management**: Must check active subscription before tracking
+- **SNS**: Push notification service (existing infrastructure, needs mobile integration)
+- **DynamoDB**: Application data storage
+- **Trail system data**: Geofence coordinates for boundaries
+
+**New Infrastructure Needed**
+
+TrailPulse requires:
+- DynamoDB tables for TrailPulse data (10 new tables)
+- SNS topic for push notifications (mobile device endpoints)
+- API Gateway endpoints for TrailPulse APIs (28 new endpoints)
+- Lambda functions for API handlers
+- DynamoDB TTL configuration for ride event expiration (90 days)
+- Background job for aggregating usage counts (optional - can be done on-demand)
+
+**Backend-Mobile Integration Flow**
+
+1. **Initial Setup**:
+   - Backend: Deploy DynamoDB tables, API endpoints, SNS topics
+   - Mobile: Implement authentication, obtain user subscription list
+   - Mobile: Call `GET /api/trailpulse/geofences` to fetch geofence boundaries
+   - Mobile: Register device token via `POST /api/trailpulse/device-token`
+
+2. **Ride Detection**:
+   - Mobile: Detect geofence entry (client-side)
+   - Mobile: Call `POST /api/trailpulse/rides/start` with coordinates and trail system ID
+   - Backend: Validate subscription, validate coordinates within geofence, record ride start
+   - Mobile: Track presence in trail system (no continuous API calls)
+   - Mobile: Detect geofence exit (client-side)
+   - Mobile: Call `POST /api/trailpulse/rides/end` with exit coordinates
+   - Backend: Record ride end, increment usage count, trigger SNS notification
+
+3. **Feedback Collection**:
+   - Mobile: Receive push notification with deeplink
+   - Mobile: User taps notification, opens feedback form
+   - Mobile: Call `GET /api/trailpulse/trail-systems/{id}/feedback-config` to get questions
+   - Mobile: Display questions to user
+   - Mobile: Call `POST /api/trailpulse/feedback` to submit responses
+   - Backend: Store feedback responses
+
+4. **Admin Configuration**:
+   - Web: Trail owner logs in, navigates to TrailPulse settings
+   - Web: Call admin endpoints to configure conditions, questions, geofences
+   - Backend: Store configuration
+   - Mobile: Fetch updated configuration on next sync
+
+#### 8.11 MVP Scope
+
+**Must Have for MVP - This Repo (Backend & Web)**
+
+Documentation scope for this repository:
+- DynamoDB schema for ride events, feedback, usage counts, geofences, preferences, crew members, audit logs
+- Backend API endpoints for mobile app (8 endpoints: ride start/end, feedback, geofences, preferences)
+- Backend API endpoints for web (2 endpoints: feedback submission)
+- Admin API endpoints (8 endpoints: configuration, usage stats, geofence management)
+- Admin API endpoints for feedback management (10 endpoints: view, search, filter, delete, crew member management)
+- SNS integration for push notifications
+- Web feedback form (manual feedback entry)
+- Admin configuration interface (trail conditions, questions, geofences)
+- Admin feedback data management interface (view, search, filter, delete feedback)
+- Crew member management interface (assign/remove crew status)
+- Usage counting and aggregation logic
+- Data retention (90-day TTL on ride events, soft delete for feedback)
+- Web feature list update with TrailPulse entry
+- Infrastructure deployment (DynamoDB tables, API Gateway, SNS topics)
+
+**Must Have for MVP - Mobile Team (Separate Repository)**
+
+Mobile team implements:
+- GPS tracking within subscribed trail systems
+- Geofence detection (entry/exit)
+- Ride start/end event recording (call backend API)
+- Push notification client
+- Mobile feedback form UI
+- User preferences for GPS opt-out
+- Device token registration
+
+**Should Have (Post-MVP)**
+
+Future enhancements:
+- Advanced question types (rating scales, multi-select)
+- Frequency-based additional questions
+- Usage analytics dashboard with graphs (web)
+- Export functionality (CSV)
+- In-app feedback history for users (mobile)
+- Map-based geofence editor (web admin)
+
+**Nice to Have (Future)**
+
+Long-term features:
+- Real-time condition map (aggregated user reports)
+- Weather integration for condition predictions
+- Social features (share ride stats)
+- Gamification (badges for ride counts)
+- ML-based condition predictions
+
+---
+
 ## Expected Behavior
 
 ### User Stories (MVP Acceptance Criteria)

@@ -5114,6 +5114,630 @@ subscriptions = Table(
 
 ---
 
+## Phase 15: TrailPulse - Trail Feedback and Usage Tracking
+
+**Objective**: Implement trail feedback collection and GPS-based usage tracking system
+
+**Duration**: 12-18 days
+**Priority**: HIGH (new feature, enhances trail system management)
+**Dependencies**: Phases 5 (Trail System Model), 10 (Notifications), 12 (iPhone Apps for GPS)
+
+### Overview
+
+TrailPulse is a privacy-first trail feedback and usage tracking system that enables trail system owners to gather rider feedback and track trail usage through GPS-based ride detection. The system uses GPS geofencing to detect when users visit subscribed trail systems, prompting them for post-ride feedback while maintaining strict privacy controls.
+
+**Key Benefits:**
+- Software-based trail counting (replaces expensive hardware counters)
+- Real-time rider feedback on trail conditions
+- Data-driven trail management decisions
+- Privacy-first design with easy opt-out
+
+**Scope for This Repo:**
+- Backend API endpoints (28 new endpoints)
+- DynamoDB schema (10 new tables)
+- Web feedback submission form
+- Admin configuration interface
+- Admin feedback management interface
+- SNS integration for push notifications
+
+**Mobile Team Scope (Separate Repository):**
+- GPS tracking and geofence detection
+- Mobile feedback form UI
+- Device token registration
+- Ride start/end event recording
+
+---
+
+### Task 15.1: Implement TrailPulse DynamoDB Schema
+
+**Objective**: Create 10 DynamoDB tables for TrailPulse data
+
+**Tables to Create:**
+
+1. **TrailConditions** - Condition options per trail system
+   - PK: `trail_system_id`
+   - Attributes: condition_name, is_multiselect, display_order, is_enabled
+
+2. **AdditionalQuestions** - Custom questions per trail system
+   - PK: `trail_system_id#question_id`
+   - Attributes: question_text, question_type, options, frequency_threshold, is_enabled, display_order
+
+3. **RideEvents** - Entry/exit timestamps with 90-day TTL
+   - PK: `user_id#ride_id`
+   - SK: `timestamp`
+   - Attributes: trail_system_id, entry_time, exit_time, entry_coords, exit_coords
+   - TTL attribute: 90 days from exit_time
+   - GSI: trail_system_id (for aggregation queries)
+
+4. **FeedbackResponses** - User responses to conditions and questions
+   - PK: `trail_system_id#feedback_id`
+   - SK: `timestamp`
+   - Attributes: user_id, ride_id, conditions, question_responses, comments, soft_deleted, deleted_at, deleted_by, deletion_reason
+   - GSI: user_id (for user feedback history)
+
+5. **UsageCounts** - Aggregated ride counts per trail system
+   - PK: `trail_system_id#date`
+   - Attributes: total_rides, unique_users, aggregated_at
+
+6. **UserPreferences** - GPS opt-out and notification settings
+   - PK: `user_id`
+   - Attributes: gps_tracking_enabled, feedback_notifications_enabled, device_tokens
+
+7. **QuestionResponseTracker** - Count responses to trigger frequency logic
+   - PK: `user_id#trail_system_id#question_id`
+   - Attributes: response_count, last_asked_at
+
+8. **TrailSystemGeofences** - Boundary coordinates for each trail system
+   - PK: `trail_system_id`
+   - Attributes: geojson_boundaries, last_updated_at, updated_by
+
+9. **CrewMembers** - Crew member status for feedback context
+   - PK: `trail_system_id#user_id`
+   - Attributes: is_crew, crew_notes, assigned_at, assigned_by
+   - GSI: user_id (for user's crew memberships)
+
+10. **FeedbackDeletionAudit** - Audit log for deleted feedback
+    - PK: `feedback_id`
+    - SK: `deleted_at`
+    - Attributes: deleted_by, deletion_reason, was_soft_delete
+
+**Implementation Steps:**
+1. Define Pulumi DynamoDB table resources in `infra/`
+2. Configure TTL on RideEvents table (90 days)
+3. Set up GSI indexes for querying
+4. Configure read/write capacity (on-demand mode)
+5. Deploy tables to dev environment
+6. Verify table creation and indexes
+7. Run integration tests
+
+**Acceptance Criteria**:
+- All 10 tables created in DynamoDB
+- TTL configured on RideEvents (90-day expiration)
+- GSI indexes functional
+- Tables accessible from Lambda functions
+
+**AI-Assisted Timeline**: 8 hours
+
+---
+
+### Task 15.2: Implement Mobile App API Endpoints (8 Endpoints)
+
+**Objective**: Create backend APIs for mobile app GPS and feedback integration
+
+**Endpoints to Implement:**
+
+1. `POST /api/trailpulse/rides/start`
+   - Body: `{ user_id, trail_system_id, entry_coords, timestamp }`
+   - Validates subscription, validates coords within geofence
+   - Creates RideEvent record
+   - Returns: `{ ride_id, success }`
+
+2. `POST /api/trailpulse/rides/end`
+   - Body: `{ ride_id, exit_coords, timestamp }`
+   - Updates RideEvent with exit data
+   - Increments UsageCounts
+   - Triggers SNS push notification
+   - Returns: `{ success, feedback_link }`
+
+3. `GET /api/trailpulse/geofences`
+   - Query params: `user_id` (gets subscribed trail systems)
+   - Returns geofence boundaries for user's subscribed trail systems only
+   - Returns: `{ trail_system_id, geojson_boundaries }[]`
+
+4. `GET /api/trailpulse/trail-systems/{id}/feedback-config`
+   - Returns trail conditions and questions for feedback form
+   - Checks question frequency logic for user
+   - Returns: `{ conditions, additional_questions[] }`
+
+5. `POST /api/trailpulse/feedback`
+   - Body: `{ ride_id, trail_system_id, conditions[], question_responses[], comments }`
+   - Creates FeedbackResponse record
+   - Updates QuestionResponseTracker
+   - Returns: `{ success, feedback_id }`
+
+6. `GET /api/trailpulse/user/ride-count/{trail_system_id}`
+   - Returns user's total ride count for trail system
+   - Returns: `{ ride_count, last_ride_date }`
+
+7. `PUT /api/trailpulse/user/preferences`
+   - Body: `{ gps_tracking_enabled, feedback_notifications_enabled }`
+   - Updates UserPreferences
+   - Returns: `{ success }`
+
+8. `POST /api/trailpulse/device-token`
+   - Body: `{ user_id, device_token, platform }`
+   - Stores device token in UserPreferences
+   - Registers with SNS platform endpoint
+   - Returns: `{ success, endpoint_arn }`
+
+**Implementation Steps:**
+1. Create Lambda handlers in `api-dynamo/` for each endpoint
+2. Implement input validation and authentication
+3. Implement geofence validation logic
+4. Implement ride counting and aggregation
+5. Configure API Gateway routes
+6. Add endpoint documentation
+7. Write unit tests for each endpoint
+8. Integration testing with Postman/Thunder Client
+
+**Acceptance Criteria**:
+- All 8 mobile endpoints functional
+- Authentication required on all endpoints
+- Geofence validation working correctly
+- Usage counts aggregating properly
+- Push notifications triggered on ride end
+
+**AI-Assisted Timeline**: 16 hours
+
+---
+
+### Task 15.3: Implement Web Feedback Endpoints (2 Endpoints)
+
+**Objective**: Create web interface for manual feedback submission
+
+**Endpoints to Implement:**
+
+1. `GET /api/trailpulse/trail-systems/subscribed`
+   - Returns user's subscribed trail systems for feedback dropdown
+   - Requires authentication
+   - Returns: `{ trail_system_id, name, organization }[]`
+
+2. `POST /api/trailpulse/feedback/web`
+   - Body: `{ trail_system_id, conditions[], question_responses[], comments }`
+   - Creates feedback response without ride_id (web submission)
+   - Returns: `{ success, feedback_id }`
+
+**Implementation Steps:**
+1. Create Lambda handlers in `api-dynamo/`
+2. Implement authentication middleware
+3. Query user subscriptions from existing subscription table
+4. Create feedback response logic (shared with mobile endpoint)
+5. Configure API Gateway routes
+6. Write unit tests
+7. Integration testing
+
+**Acceptance Criteria**:
+- Both web endpoints functional
+- Authentication working
+- Feedback submissions recorded correctly
+- Web feedback distinguishable from mobile feedback
+
+**AI-Assisted Timeline**: 4 hours
+
+---
+
+### Task 15.4: Implement Admin Configuration Endpoints (8 Endpoints)
+
+**Objective**: Trail system owner configuration APIs
+
+**Endpoints to Implement:**
+
+1. `GET /api/trailpulse/admin/trail-systems/{id}/config`
+2. `PUT /api/trailpulse/admin/trail-systems/{id}/conditions`
+3. `POST /api/trailpulse/admin/trail-systems/{id}/questions`
+4. `PUT /api/trailpulse/admin/trail-systems/{id}/questions/{question_id}`
+5. `DELETE /api/trailpulse/admin/trail-systems/{id}/questions/{question_id}`
+6. `GET /api/trailpulse/admin/trail-systems/{id}/usage`
+7. `PUT /api/trailpulse/admin/trail-systems/{id}/geofence`
+8. `GET /api/trailpulse/admin/trail-systems/{id}/geofence`
+
+**Implementation Steps:**
+1. Create Lambda handlers for CRUD operations
+2. Implement org-admin authorization checks
+3. Implement condition and question management logic
+4. Implement geofence CRUD with validation
+5. Implement usage statistics aggregation
+6. Configure API Gateway routes
+7. Write unit tests
+8. Integration testing
+
+**Acceptance Criteria**:
+- All 8 admin config endpoints functional
+- Proper authorization (org-admin+ only)
+- Geofence validation working
+- Usage stats accurate
+
+**AI-Assisted Timeline**: 12 hours
+
+---
+
+### Task 15.5: Implement Admin Feedback Management Endpoints (10 Endpoints)
+
+**Objective**: Feedback viewing, filtering, and management APIs
+
+**Endpoints to Implement:**
+
+1. `GET /api/trailpulse/admin/trail-systems/{id}/feedback` - Paginated feedback with filters
+2. `GET /api/trailpulse/admin/trail-systems/{id}/feedback/{feedback_id}` - Single feedback detail
+3. `DELETE /api/trailpulse/admin/trail-systems/{id}/feedback/{feedback_id}` - Delete single
+4. `POST /api/trailpulse/admin/trail-systems/{id}/feedback/bulk-delete` - Bulk delete
+5. `POST /api/trailpulse/admin/trail-systems/{id}/feedback/delete-by-filter` - Filter-based delete
+6. `GET /api/trailpulse/admin/trail-systems/{id}/feedback/statistics` - Aggregated stats
+7. `GET /api/trailpulse/admin/trail-systems/{id}/users/{user_id}/feedback` - User feedback history
+8. `PUT /api/trailpulse/admin/trail-systems/{id}/users/{user_id}/crew-status` - Crew member flag
+9. `GET /api/trailpulse/admin/trail-systems/{id}/crew-members` - List crew members
+10. `POST /api/trailpulse/admin/trail-systems/{id}/crew-members/bulk` - Bulk crew assignment
+
+**Implementation Steps:**
+1. Implement feedback query with pagination and filters
+2. Implement soft delete and audit logging
+3. Implement bulk delete operations
+4. Implement feedback statistics aggregation
+5. Implement crew member management
+6. Configure API Gateway routes
+7. Write unit tests for complex queries
+8. Integration testing
+
+**Acceptance Criteria**:
+- All 10 feedback management endpoints functional
+- Pagination working correctly
+- Filters combining properly (date, condition, user, text search)
+- Soft delete and audit trail working
+- Crew member management functional
+
+**AI-Assisted Timeline**: 16 hours
+
+---
+
+### Task 15.6: Implement SNS Push Notification Triggers
+
+**Objective**: Send push notifications on ride end
+
+**Implementation Steps:**
+1. Extend existing SNS infrastructure for TrailPulse
+2. Retrieve device token from UserPreferences on ride end
+3. Format notification payload:
+   - Title: "How were the trails today?"
+   - Body: Trail system name
+   - Deeplink: `traillens://feedback/{ride_id}`
+4. Send notification via SNS → APNS
+5. Handle notification failures gracefully (log, don't block)
+6. Respect user notification preferences
+7. Test notification delivery on iOS devices
+
+**Acceptance Criteria**:
+- Push notifications sent on ride end
+- Notification includes deeplink
+- Failures logged but don't block ride recording
+- User preferences respected (opt-out works)
+
+**AI-Assisted Timeline**: 6 hours
+
+---
+
+### Task 15.7: Build Web Feedback Submission Form
+
+**Objective**: Manual feedback form for web users
+
+**Implementation Steps:**
+1. Create React component in `web/src/components/TrailPulse/`
+2. Fetch subscribed trail systems dropdown
+3. Fetch feedback config (conditions, questions)
+4. Build form UI with:
+   - Trail system selector
+   - Condition checkboxes/radio buttons
+   - Additional question inputs
+   - Free-text comment field
+   - Submit button
+5. Implement form submission to web endpoint
+6. Add success/error toast notifications
+7. Require authentication (redirect if not logged in)
+8. Add to user dashboard
+
+**Acceptance Criteria**:
+- Web feedback form functional
+- User can submit feedback manually
+- Form loads conditions and questions dynamically
+- Success message displayed on submission
+- Authentication required
+
+**AI-Assisted Timeline**: 8 hours
+
+---
+
+### Task 15.8: Build Admin TrailPulse Configuration Interface
+
+**Objective**: Trail system owner configuration UI
+
+**Implementation Steps:**
+1. Create React components in `web/src/components/Admin/TrailPulse/`
+2. **Trail Condition Management:**
+   - List current conditions
+   - Add new condition (name, multiselect, display order)
+   - Edit existing condition
+   - Delete condition (with confirmation)
+   - Reorder conditions (drag-and-drop)
+   - Preview how conditions appear to users
+3. **Additional Questions Management:**
+   - List current questions
+   - Create new question (type, options, frequency)
+   - Edit existing question
+   - Delete question (with confirmation)
+   - Enable/disable questions
+   - Reorder questions
+4. **Notification Customization:**
+   - Edit notification message
+   - Set notification timing (immediate, 5 min delay)
+   - Enable/disable notifications
+5. **Geofence Management:**
+   - Display current geofence on map
+   - Edit geofence boundaries (coordinate input or map drawing)
+   - Preview geofence coverage
+   - Validate and save geofence
+6. Add to admin dashboard navigation
+7. Restrict access to org-admin+
+
+**Acceptance Criteria**:
+- Admin can manage trail conditions
+- Admin can create/edit/delete questions
+- Admin can set frequency thresholds
+- Admin can customize notification message
+- Admin can define/edit geofences
+- All changes saved to backend
+- Authorization enforced (org-admin+)
+
+**AI-Assisted Timeline**: 20 hours
+
+---
+
+### Task 15.9: Build Admin Feedback Data Management Interface
+
+**Objective**: Feedback viewing, filtering, and management UI
+
+**Implementation Steps:**
+1. Create React components in `web/src/components/Admin/TrailPulse/`
+2. **Feedback Data Table:**
+   - Display feedback in paginated table
+   - Columns: Date, User, Conditions, Responses, Comments, Crew Status
+   - Expandable rows for full details
+   - Sort by date (most recent first)
+3. **Search and Filters:**
+   - Date range picker (last 7 days, last 30 days, custom)
+   - Condition filter (dropdown, multi-select)
+   - User type filter (all, crew, regular, frequent)
+   - Text search (search comments)
+   - Feedback count filter (N+ submissions)
+   - Apply multiple filters simultaneously
+   - Save filter presets (localStorage)
+4. **Feedback Management:**
+   - Select individual feedback (checkbox)
+   - Delete single feedback (with confirmation)
+   - Bulk delete selected (with confirmation)
+   - Delete by filter (with confirmation)
+   - Soft delete option (checkbox)
+   - Deletion reason field (optional)
+   - Deletion audit log display
+5. **Crew Member Management:**
+   - Click user to see feedback history
+   - "Mark as Crew Member" button
+   - Crew notes field
+   - Bulk crew assignment
+   - Crew member list view
+6. **Feedback Statistics:**
+   - Condition distribution pie chart
+   - Top contributors leaderboard
+   - Average feedback frequency
+   - Crew vs. regular user breakdown
+7. **Integration with Trail Condition Setting:**
+   - "Feedback Summary" card showing condition distribution
+   - "Set Condition from Feedback" quick action button
+   - Display recent feedback when setting conditions manually
+8. Add to admin dashboard navigation
+9. Restrict access to org-admin+
+
+**Acceptance Criteria**:
+- Admin can view all feedback for their trail systems
+- Pagination working (50 per page)
+- All filters functional and combinable
+- Delete operations working (single, bulk, by filter)
+- Soft delete and audit trail visible
+- Crew member management functional
+- Feedback statistics displayed correctly
+- Integration with condition setting working
+- Authorization enforced (org-admin+)
+
+**AI-Assisted Timeline**: 24 hours
+
+---
+
+### Task 15.10: Implement Usage Counting and Aggregation
+
+**Objective**: Accurate trail usage metrics
+
+**Implementation Steps:**
+1. Implement ride counting logic in ride end handler
+2. Deduplicate entries/exits within 10-minute window
+3. Aggregate counts daily:
+   - Total rides per trail system
+   - Unique users per trail system
+   - Store in UsageCounts table
+4. Create background Lambda for aggregation (cron job)
+5. Query usage data for admin dashboard
+6. Build usage analytics UI:
+   - Daily/weekly/monthly usage counts
+   - Trend graphs over time
+   - Export usage data (CSV)
+7. Test accuracy with simulated rides
+
+**Acceptance Criteria**:
+- Usage counts accurate (no duplicates)
+- Daily aggregation running automatically
+- Usage stats visible to trail system owners
+- Export functionality working
+
+**AI-Assisted Timeline**: 10 hours
+
+---
+
+### Task 15.11: Implement Data Retention and TTL
+
+**Objective**: Auto-delete ride events after 90 days
+
+**Implementation Steps:**
+1. Configure DynamoDB TTL on RideEvents table
+2. Set TTL attribute to 90 days from exit_time
+3. Verify automatic deletion working
+4. Ensure aggregated usage counts preserved
+5. Document retention policy in privacy policy
+
+**Acceptance Criteria**:
+- RideEvents automatically deleted after 90 days
+- Aggregated counts remain indefinitely
+- Feedback responses retained indefinitely
+- TTL working correctly in prod
+
+**AI-Assisted Timeline**: 2 hours
+
+---
+
+### Task 15.12: Update Web Features List
+
+**Objective**: Add TrailPulse to website features page
+
+**Implementation Steps:**
+1. Edit `web/src/data/features.js`
+2. Add TrailPulse feature object (ID 8):
+   ```javascript
+   {
+     id: 8,
+     title: 'TrailPulse',
+     description: 'Share your trail experience and help improve conditions for the entire riding community',
+     category: 'trail-engagement',
+     icon: 'fa-heartbeat',
+     image: '/img/features/trailpulse.png',
+     benefits: [
+       'Quick post-ride feedback on trail conditions',
+       'Help other riders know what to expect',
+       'Privacy-first - only tracks when you\'re on subscribed trails',
+       'Contribute to trail improvements with your input',
+       'Easy opt-out if you prefer not to share',
+       'Make your voice heard on trail maintenance priorities'
+     ]
+   }
+   ```
+3. Add new category to featureCategories:
+   ```javascript
+   { id: 'trail-engagement', name: 'Trail Engagement' }
+   ```
+4. Verify feature displays on Features page
+5. Test category filter
+
+**Acceptance Criteria**:
+- TrailPulse feature visible on Features page
+- "Trail Engagement" category filter working
+- Feature card displays correctly
+- No breaking changes to existing features
+
+**AI-Assisted Timeline**: 1 hour
+
+---
+
+### Task 15.13: Testing and Integration
+
+**Objective**: End-to-end testing of TrailPulse feature
+
+**Test Scenarios:**
+
+1. **Mobile App Flow:**
+   - Simulate ride start/end via API calls
+   - Verify notification sent
+   - Submit feedback via mobile endpoint
+   - Verify feedback stored correctly
+
+2. **Web Feedback Flow:**
+   - Login to web app
+   - Submit manual feedback
+   - Verify feedback stored
+
+3. **Admin Configuration Flow:**
+   - Create trail conditions
+   - Create additional questions
+   - Define geofence boundaries
+   - Verify configuration saved
+
+4. **Admin Feedback Management Flow:**
+   - View feedback table
+   - Apply filters
+   - Delete feedback (single, bulk)
+   - Assign crew member status
+   - View feedback statistics
+
+5. **Usage Counting:**
+   - Simulate multiple rides
+   - Verify counts accurate
+   - Verify deduplication working
+
+6. **Data Retention:**
+   - Verify TTL configured
+   - Test automatic deletion (simulate 90-day expiration)
+
+**Implementation Steps:**
+1. Write integration test suite
+2. Execute all test scenarios
+3. Document any issues found
+4. Fix critical bugs
+5. Retest after fixes
+
+**Acceptance Criteria**:
+- All test scenarios pass
+- No critical bugs
+- Feature ready for pilot testing
+
+**AI-Assisted Timeline**: 12 hours
+
+---
+
+**Phase 15 Total Duration**: 12-18 days
+
+**Phase 15 Success Criteria**:
+- All 28 API endpoints implemented and tested
+- All 10 DynamoDB tables deployed
+- Web feedback form functional
+- Admin configuration interface complete
+- Admin feedback management interface complete
+- Push notifications working on ride end
+- Usage counting accurate
+- Data retention (90-day TTL) configured
+- Web features list updated
+- End-to-end testing passed
+- Feature ready for mobile team integration
+- Documentation complete
+
+**Phase 15 Dependencies**:
+- Phase 5 (Trail System Model) - Required for trail system associations
+- Phase 10 (Notification System) - Required for SNS push notification infrastructure
+- Phase 12 (iPhone Apps) - Mobile team needs APIs for GPS integration
+
+**Phase 15 Notes**:
+- This phase focuses on backend and web implementation
+- Mobile team implements GPS tracking separately
+- Coordinate with mobile team on API contracts
+- Test notifications require iOS devices
+- Geofence validation critical for privacy
+- Consider phased rollout (beta users first)
+
+---
+
 
 ---
 

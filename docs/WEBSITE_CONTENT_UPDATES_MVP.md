@@ -1264,7 +1264,7 @@ Create a split-screen mockup showing a mobile app interface for Trail Care Repor
 
 **Image Generation Prompt:**
 ```
-Create an illustration showing social media automation workflow. Center: A trail organization admin clicking one "Update Status" button on a laptop. Arrows branching out to multiple platforms: Facebook logo with a trail closure post, Instagram logo with a trail photo and status update, and email icon with notification. The style should be modern, clean vector illustration with TrailLensHQ brand colors. Show time savings with a clock icon displaying "-10 hours/month" saved.
+Create an illustration showing social media automation workflow. Center: A trail organization admin clicking one "Update Status" button on a laptop. Arrows branching out to multiple platforms: Facebook logo with a trails conditions muddy post, Instagram logo with a trail photo and status update, and email icon with notification. The style should be modern, clean vector illustration with TrailLensHQ brand colors. Show time savings with a clock icon displaying "-10 hours/month" saved.
 ```
 
 **Specifications:**
