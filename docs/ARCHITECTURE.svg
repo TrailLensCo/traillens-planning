@@ -1,250 +1,407 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1100" width="1400" height="1100">
-  <!-- Title -->
-  <text x="700" y="30" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#232F3E">
-    TrailLensHQ System Architecture
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1295" width="1600" height="1295">
 
-  <!-- Legend -->
-  <g id="legend" transform="translate(1100, 50)">
-    <rect x="0" y="0" width="20" height="20" fill="#FF9900" stroke="#232F3E" stroke-width="1"/>
-    <text x="25" y="15" font-family="Arial" font-size="12" fill="#232F3E">AWS Service</text>
+<defs>
+  <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#566573"/>
+  </marker>
+</defs>
 
-    <rect x="0" y="30" width="20" height="20" fill="#4A90E2" stroke="#232F3E" stroke-width="1"/>
-    <text x="25" y="45" font-family="Arial" font-size="12" fill="#232F3E">Application</text>
+<!-- Background -->
+<rect width="1600" height="1295" fill="#F8F9FA"/>
 
-    <rect x="0" y="60" width="20" height="20" fill="#7ED321" stroke="#232F3E" stroke-width="1"/>
-    <text x="25" y="75" font-family="Arial" font-size="12" fill="#232F3E">External Service</text>
-  </g>
+<!-- TITLE -->
+<text x="700" y="30" font-family="Arial,sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#232F3E">TrailLensHQ System Architecture — Version 3.0 (April 2026)</text>
 
-  <!-- CLIENT LAYER -->
-  <g id="client-layer">
-    <text x="50" y="80" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">Client Layer</text>
+<!-- ============================================================ -->
+<!-- LEGEND / NOTES  (x=1220 to x=1590) -->
+<!-- ============================================================ -->
 
-    <!-- iOS App -->
-    <rect x="50" y="100" width="140" height="80" rx="5" fill="#4A90E2" stroke="#232F3E" stroke-width="2"/>
-    <text x="120" y="130" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">iOS App</text>
-    <text x="120" y="150" font-family="Arial" font-size="11" text-anchor="middle" fill="white">Swift Native</text>
-    <text x="120" y="165" font-family="Arial" font-size="10" text-anchor="middle" fill="white">APNS Push</text>
+<!-- Legend box -->
+<rect x="1220" y="48" width="360" height="200" rx="6" fill="white" stroke="#BDC3C7" stroke-width="1.5"/>
+<text x="1240" y="70" font-family="Arial" font-size="13" font-weight="bold" fill="#232F3E">Legend</text>
+<rect x="1240" y="78" width="14" height="14" fill="#4A90E2" rx="2"/>
+<text x="1260" y="90" font-family="Arial" font-size="11" fill="#232F3E">iOS / Web Application</text>
+<rect x="1240" y="98" width="14" height="14" fill="#27AE60" rx="2"/>
+<text x="1260" y="110" font-family="Arial" font-size="11" fill="#232F3E">Android App (Active Development)</text>
+<rect x="1240" y="118" width="14" height="14" fill="#FF9900" rx="2"/>
+<text x="1260" y="130" font-family="Arial" font-size="11" fill="#232F3E">AWS Service</text>
+<rect x="1240" y="138" width="14" height="14" fill="#9B59B6" rx="2"/>
+<text x="1260" y="150" font-family="Arial" font-size="11" fill="#232F3E">Lambda Function (Python 3.14)</text>
+<rect x="1240" y="158" width="14" height="14" fill="#5D6D7E" rx="2"/>
+<text x="1260" y="170" font-family="Arial" font-size="11" fill="#232F3E">Infrastructure / IaC</text>
+<rect x="1240" y="178" width="14" height="14" fill="#7ED321" rx="2"/>
+<text x="1260" y="190" font-family="Arial" font-size="11" fill="#232F3E">External Service</text>
+<rect x="1240" y="198" width="14" height="14" fill="#95A5A6" rx="2" stroke="#7F8C8D" stroke-width="1"/>
+<text x="1260" y="210" font-family="Arial" font-size="11" fill="#232F3E">Disabled / Superseded</text>
+<text x="1240" y="234" font-family="Arial" font-size="10" font-style="italic" fill="#7F8C8D">Dashed border = disabled/legacy</text>
 
-    <!-- Android App -->
-    <rect x="210" y="100" width="140" height="80" rx="5" fill="#4A90E2" stroke="#232F3E" stroke-width="2"/>
-    <text x="280" y="130" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Android App</text>
-    <text x="280" y="150" font-family="Arial" font-size="11" text-anchor="middle" fill="white">Kotlin Native</text>
-    <text x="280" y="165" font-family="Arial" font-size="10" text-anchor="middle" fill="white">FCM Push</text>
+<!-- Deployment Order -->
+<rect x="1220" y="260" width="360" height="88" rx="6" fill="#FFFDE7" stroke="#F9E79F" stroke-width="1.5"/>
+<text x="1400" y="278" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="#7D6608">Deployment Order</text>
+<text x="1240" y="296" font-family="Arial" font-size="11" fill="#232F3E">1. infra/  — shared AWS resources</text>
+<text x="1240" y="313" font-family="Arial" font-size="11" fill="#232F3E">2. api-dynamo/  — all 10 Lambdas</text>
+<text x="1240" y="330" font-family="Arial" font-size="11" fill="#232F3E">3. webui/  — React web app (Amplify)</text>
+<text x="1240" y="344" font-family="Arial" font-size="10" font-style="italic" fill="#7D6608">infra/ deploys NO Lambda functions</text>
 
-    <!-- Web App -->
-    <rect x="370" y="100" width="180" height="80" rx="5" fill="#4A90E2" stroke="#232F3E" stroke-width="2"/>
-    <text x="460" y="125" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Web Application</text>
-    <text x="460" y="145" font-family="Arial" font-size="11" text-anchor="middle" fill="white">React 18 + Tailwind</text>
-    <text x="460" y="160" font-family="Arial" font-size="10" text-anchor="middle" fill="white">26 Pages | 88% Coverage</text>
-    <text x="460" y="173" font-family="Arial" font-size="9" text-anchor="middle" fill="white">AWS Amplify + CloudFront</text>
-  </g>
+<!-- Lambdas note -->
+<rect x="1220" y="360" width="360" height="110" rx="6" fill="#F3E5F5" stroke="#D7BDE2" stroke-width="1.5"/>
+<text x="1400" y="378" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="#6C3483">10 Lambda Functions</text>
+<text x="1240" y="396" font-family="Arial" font-size="11" fill="#232F3E">All owned by api-dynamo/pulumi/</text>
+<text x="1240" y="413" font-family="Arial" font-size="11" fill="#232F3E">Python 3.14, ARM64 Graviton2</text>
+<text x="1240" y="430" font-family="Arial" font-size="11" fill="#232F3E">1 API  +  3 notifications</text>
+<text x="1240" y="447" font-family="Arial" font-size="11" fill="#232F3E">+  photo processor  +  email forwarder</text>
+<text x="1240" y="464" font-family="Arial" font-size="11" fill="#232F3E">+  4 Cognito auth triggers</text>
 
-  <!-- AUTHENTICATION LAYER -->
-  <g id="auth-layer">
-    <text x="50" y="230" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">Authentication</text>
+<!-- DynamoDB note -->
+<rect x="1220" y="482" width="360" height="105" rx="6" fill="#EBF5FB" stroke="#AED6F1" stroke-width="1.5"/>
+<text x="1400" y="500" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="#1A5276">DynamoDB Single Table</text>
+<text x="1240" y="518" font-family="Arial" font-size="11" fill="#232F3E">1 table replaces 21-table design</text>
+<text x="1240" y="535" font-family="Arial" font-size="11" fill="#232F3E">66 access patterns</text>
+<text x="1240" y="552" font-family="Arial" font-size="11" fill="#232F3E">GSI1–5: overloaded indexes</text>
+<text x="1240" y="569" font-family="Arial" font-size="11" fill="#232F3E">GSI6: geohash geospatial index</text>
+<text x="1240" y="582" font-family="Arial" font-size="10" font-style="italic" fill="#1A5276">Spec: api-dynamo/docs/dynamodb-spec.json</text>
 
-    <!-- Cognito -->
-    <rect x="50" y="250" width="500" height="70" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="300" y="275" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">AWS Cognito User Pool</text>
-    <text x="300" y="295" font-family="Arial" font-size="11" text-anchor="middle" fill="white">JWT Authentication | 8 User Groups (admin, org-admin, trail-owner, trail-crew, etc.)</text>
-    <text x="300" y="310" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Custom Domain: auth.dev.traillenshq.com | MFA Support</text>
-  </g>
+<!-- Performance note -->
+<rect x="1220" y="599" width="360" height="88" rx="6" fill="#EAFAF1" stroke="#A9DFBF" stroke-width="1.5"/>
+<text x="1400" y="617" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="#145A32">Performance Targets</text>
+<text x="1240" y="635" font-family="Arial" font-size="11" fill="#232F3E">Design target: 100,000 DAU</text>
+<text x="1240" y="652" font-family="Arial" font-size="11" fill="#232F3E">Lambda P95 &lt; 200ms / P99 &lt; 500ms</text>
+<text x="1240" y="669" font-family="Arial" font-size="11" fill="#232F3E">~1,157 RPS sustained throughput</text>
+<text x="1240" y="683" font-family="Arial" font-size="10" font-style="italic" fill="#145A32">Current scale: &lt;500 MAU</text>
 
-  <!-- API GATEWAY LAYER -->
-  <g id="api-layer">
-    <text x="50" y="370" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">API Layer</text>
+<!-- ============================================================ -->
+<!-- LAYER 1: CLIENT LAYER  (y=48 to 237) -->
+<!-- ============================================================ -->
+<rect x="10" y="48" width="1200" height="189" rx="8" fill="#EBF5FB" stroke="#AED6F1" stroke-width="1"/>
+<text x="24" y="65" font-family="Arial" font-size="13" font-weight="bold" fill="#1A5276">CLIENT LAYER</text>
 
-    <!-- API Gateway -->
-    <rect x="50" y="390" width="500" height="60" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="300" y="415" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">AWS API Gateway (REST)</text>
-    <text x="300" y="435" font-family="Arial" font-size="11" text-anchor="middle" fill="white">Regional Endpoint | Custom Domain: api.dev.traillenshq.com | Rate Limiting: 100 req/min</text>
-  </g>
+<!-- iOS User App: x=20, w=185 -->
+<rect x="20" y="72" width="185" height="155" rx="6" fill="#4A90E2" stroke="#2C7BE5" stroke-width="1.5"/>
+<text x="112" y="96" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">iOS User App</text>
+<text x="112" y="113" font-family="Arial" font-size="10" text-anchor="middle" fill="#D6EAF8">Swift Native</text>
+<text x="112" y="129" font-family="Arial" font-size="10" text-anchor="middle" fill="white">WebAuthn / Magic Link</text>
+<text x="112" y="145" font-family="Arial" font-size="10" text-anchor="middle" fill="white">APNS Push Notifications</text>
+<text x="112" y="161" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Trail discovery + Reports</text>
+<text x="112" y="177" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Offline capability (7-day)</text>
+<text x="112" y="196" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">REQUIRED for MVP v1.13</text>
+<text x="112" y="212" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">Separate iOS repository</text>
 
-  <!-- APPLICATION LAYER -->
-  <g id="app-layer">
-    <text x="50" y="500" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">Application Services</text>
+<!-- iOS Admin App: x=214, w=185 -->
+<rect x="214" y="72" width="185" height="155" rx="6" fill="#4A90E2" stroke="#2C7BE5" stroke-width="1.5"/>
+<text x="306" y="96" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">iOS Admin App</text>
+<text x="306" y="113" font-family="Arial" font-size="10" text-anchor="middle" fill="#D6EAF8">Swift Native</text>
+<text x="306" y="129" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Role-gated (trail-crew+)</text>
+<text x="306" y="145" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Trail mgmt + Status updates</text>
+<text x="306" y="161" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Full Care Report CRUD</text>
+<text x="306" y="177" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Photo upload + geolocation</text>
+<text x="306" y="196" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">REQUIRED for MVP v1.13</text>
+<text x="306" y="212" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">Same repo as user app</text>
 
-    <!-- API Lambda -->
-    <rect x="50" y="520" width="240" height="110" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="170" y="545" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Main API Lambda</text>
-    <text x="170" y="565" font-family="Arial" font-size="11" text-anchor="middle" fill="white">FastAPI + Python 3.13</text>
-    <text x="170" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">60+ REST Endpoints</text>
-    <text x="170" y="595" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Trails | Users | Reviews</text>
-    <text x="170" y="608" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Forums | Events | Volunteers</text>
-    <text x="170" y="621" font-family="Arial" font-size="9" text-anchor="middle" fill="white">80%+ Test Coverage</text>
+<!-- Android User App: x=408, w=185 -->
+<rect x="408" y="72" width="185" height="155" rx="6" fill="#27AE60" stroke="#1E8449" stroke-width="1.5"/>
+<text x="500" y="96" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Android User</text>
+<text x="500" y="113" font-family="Arial" font-size="10" text-anchor="middle" fill="#D5F5E3">Kotlin 2.3.20</text>
+<text x="500" y="129" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Jetpack Compose + Hilt</text>
+<text x="500" y="145" font-family="Arial" font-size="10" text-anchor="middle" fill="white">FCM Push Notifications</text>
+<text x="500" y="161" font-family="Arial" font-size="10" text-anchor="middle" fill="white">androiduser/ repo</text>
+<text x="500" y="177" font-family="Arial" font-size="10" text-anchor="middle" fill="white">com.traillenshq.app</text>
+<text x="500" y="196" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D5F5E3">Active Development</text>
+<text x="500" y="212" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D5F5E3">Composite Gradle build</text>
 
-    <!-- Facebook API Lambda -->
-    <rect x="310" y="520" width="240" height="110" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="430" y="545" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Social Media API</text>
-    <text x="430" y="565" font-family="Arial" font-size="11" text-anchor="middle" fill="white">NestJS + Node.js 22</text>
-    <text x="430" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Facebook Pages Posting</text>
-    <text x="430" y="595" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Instagram Posts + Stories</text>
-    <text x="430" y="608" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Multi-Tenant | Rate Limiting</text>
-    <text x="430" y="621" font-family="Arial" font-size="9" text-anchor="middle" fill="white">80% Complete</text>
-  </g>
+<!-- Android Admin App: x=602, w=185 -->
+<rect x="602" y="72" width="185" height="155" rx="6" fill="#27AE60" stroke="#1E8449" stroke-width="1.5"/>
+<text x="694" y="96" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Android Admin</text>
+<text x="694" y="113" font-family="Arial" font-size="10" text-anchor="middle" fill="#D5F5E3">Kotlin 2.3.20</text>
+<text x="694" y="129" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Jetpack Compose + Hilt</text>
+<text x="694" y="145" font-family="Arial" font-size="10" text-anchor="middle" fill="white">androidadmin/ repo</text>
+<text x="694" y="161" font-family="Arial" font-size="10" text-anchor="middle" fill="white">com.traillenshq.admin</text>
+<text x="694" y="177" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Retrofit 3.0.0 + OkHttp 5</text>
+<text x="694" y="196" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D5F5E3">Active Development</text>
+<text x="694" y="212" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D5F5E3">71 API endpoints</text>
 
-  <!-- DATABASE LAYER -->
-  <g id="database-layer">
-    <text x="50" y="680" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">Data Layer</text>
+<!-- webui/ (Current): x=796, w=196 -->
+<rect x="796" y="72" width="196" height="155" rx="6" fill="#4A90E2" stroke="#1A5276" stroke-width="2"/>
+<text x="894" y="96" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Web Application</text>
+<text x="894" y="113" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">webui/ — CURRENT</text>
+<text x="894" y="130" font-family="Arial" font-size="10" text-anchor="middle" fill="#D6EAF8">React 19 + Tailwind CSS 4.x</text>
+<text x="894" y="146" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Ground-up rebuild</text>
+<text x="894" y="162" font-family="Arial" font-size="10" text-anchor="middle" fill="white">No legacy template deps</text>
+<text x="894" y="178" font-family="Arial" font-size="10" text-anchor="middle" fill="white">AWS Amplify + CloudFront</text>
+<text x="894" y="196" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">Active Development</text>
+<text x="894" y="212" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">www.traillenshq.com</text>
 
-    <!-- DynamoDB -->
-    <rect x="50" y="700" width="340" height="110" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="220" y="725" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Amazon DynamoDB (16 Tables)</text>
-    <text x="220" y="745" font-family="Arial" font-size="10" text-anchor="middle" fill="white">trails | users | devices | reviews | photos | history</text>
-    <text x="220" y="760" font-family="Arial" font-size="10" text-anchor="middle" fill="white">forum_topics | forum_replies | events | event_rsvps</text>
-    <text x="220" y="775" font-family="Arial" font-size="10" text-anchor="middle" fill="white">volunteer_opportunities | volunteer_signups | testimonials</text>
-    <text x="220" y="790" font-family="Arial" font-size="10" text-anchor="middle" fill="white">case_studies | demo_requests | partner_applications</text>
-    <text x="220" y="802" font-family="Arial" font-size="9" text-anchor="middle" fill="white">Pay-Per-Request | GSI Queries | Point-in-Time Recovery</text>
+<!-- web/ (Legacy): x=1002, w=185 -->
+<rect x="1002" y="72" width="185" height="155" rx="6" fill="#95A5A6" stroke="#7F8C8D" stroke-width="1.5" stroke-dasharray="7,4"/>
+<text x="1094" y="96" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">web/ (Legacy)</text>
+<text x="1094" y="113" font-family="Arial" font-size="10" text-anchor="middle" fill="#ECF0F1">SUPERSEDED</text>
+<text x="1094" y="130" font-family="Arial" font-size="10" text-anchor="middle" fill="white">React 19 + Tailwind 3.x</text>
+<text x="1094" y="146" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Template-based codebase</text>
+<text x="1094" y="162" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Legacy dependencies</text>
+<text x="1094" y="178" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Replaced by webui/</text>
+<text x="1094" y="196" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#ECF0F1">AWS Amplify</text>
+<text x="1094" y="212" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#ECF0F1">Predecessor only</text>
 
-    <!-- Redis (Optional) -->
-    <rect x="410" y="700" width="140" height="60" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2" stroke-dasharray="5,5"/>
-    <text x="480" y="725" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">ElastiCache</text>
-    <text x="480" y="743" font-family="Arial" font-size="11" text-anchor="middle" fill="white">Redis 7.0</text>
-    <text x="480" y="756" font-family="Arial" font-size="9" text-anchor="middle" fill="white">(Optional - Disabled)</text>
-  </g>
+<!-- ============================================================ -->
+<!-- LAYER 2: CDN / NETWORK  (y=245 to 355) -->
+<!-- ============================================================ -->
+<rect x="10" y="245" width="1200" height="110" rx="8" fill="#FFF3E0" stroke="#F5CBA7" stroke-width="1"/>
+<text x="24" y="263" font-family="Arial" font-size="13" font-weight="bold" fill="#7E5109">CDN / NETWORK</text>
 
-  <!-- STORAGE LAYER -->
-  <g id="storage-layer">
-    <!-- S3 Photos Bucket -->
-    <rect x="50" y="840" width="170" height="70" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="135" y="865" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">S3 Photos Bucket</text>
-    <text x="135" y="883" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Trail Photos</text>
-    <text x="135" y="897" font-family="Arial" font-size="9" text-anchor="middle" fill="white">Versioned | Encrypted</text>
+<!-- WAF: x=20, w=283 -->
+<rect x="20" y="270" width="283" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="161" y="291" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">AWS WAF</text>
+<text x="161" y="308" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Rate Limit: 2,000 req/5min/IP</text>
+<text x="161" y="323" font-family="Arial" font-size="10" text-anchor="middle" fill="white">CommonRuleSet | SQLi | KnownBadInputs</text>
+<text x="161" y="337" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">OWASP top-10 protection</text>
 
-    <!-- CloudFront CDN -->
-    <rect x="240" y="840" width="150" height="70" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="315" y="865" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">CloudFront CDN</text>
-    <text x="315" y="883" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Global Edge Cache</text>
-    <text x="315" y="897" font-family="Arial" font-size="9" text-anchor="middle" fill="white">5-min TTL</text>
+<!-- CloudFront: x=313, w=283 -->
+<rect x="313" y="270" width="283" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="454" y="291" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">CloudFront CDN</text>
+<text x="454" y="308" font-family="Arial" font-size="10" text-anchor="middle" fill="white">200+ Edge Locations | Sub-100ms</text>
+<text x="454" y="323" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Photos: 1yr cache | Assets: 5min</text>
+<text x="454" y="337" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">Origin: S3 trail-photos bucket</text>
 
-    <!-- Lambda Deployments -->
-    <rect x="410" y="840" width="140" height="70" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="480" y="865" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">S3 Lambda</text>
-    <text x="480" y="883" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Deployment Pkgs</text>
-    <text x="480" y="897" font-family="Arial" font-size="9" text-anchor="middle" fill="white">30-day Retention</text>
-  </g>
+<!-- Route53 + ACM: x=606, w=283 -->
+<rect x="606" y="270" width="283" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="747" y="291" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Route53 + ACM</text>
+<text x="747" y="308" font-family="Arial" font-size="10" text-anchor="middle" fill="white">traillenshq.com | DNS + TLS</text>
+<text x="747" y="323" font-family="Arial" font-size="10" text-anchor="middle" fill="white">ACM auto-renewal | DNS validation</text>
+<text x="747" y="337" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">api / auth / www subdomains</text>
 
-  <!-- MESSAGING LAYER -->
-  <g id="messaging-layer">
-    <text x="50" y="960" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">Messaging &amp; Notifications</text>
+<!-- Amplify: x=899, w=299 -->
+<rect x="899" y="270" width="299" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="1048" y="291" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">AWS Amplify</text>
+<text x="1048" y="308" font-family="Arial" font-size="10" text-anchor="middle" fill="white">webui/ git push triggers build + deploy</text>
+<text x="1048" y="323" font-family="Arial" font-size="10" text-anchor="middle" fill="white">www.traillenshq.com</text>
+<text x="1048" y="337" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">CI/CD for React 19 web frontend</text>
 
-    <!-- SNS -->
-    <rect x="50" y="980" width="140" height="80" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="120" y="1005" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Amazon SNS</text>
-    <text x="120" y="1023" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Push Notifications</text>
-    <text x="120" y="1038" font-family="Arial" font-size="10" text-anchor="middle" fill="white">APNS (iOS)</text>
-    <text x="120" y="1052" font-family="Arial" font-size="10" text-anchor="middle" fill="white">FCM (Android)</text>
+<!-- ============================================================ -->
+<!-- LAYER 3: API LAYER  (y=363 to 473) -->
+<!-- ============================================================ -->
+<rect x="10" y="363" width="1200" height="110" rx="8" fill="#EAFAF1" stroke="#A9DFBF" stroke-width="1"/>
+<text x="24" y="381" font-family="Arial" font-size="13" font-weight="bold" fill="#145A32">API LAYER</text>
 
-    <!-- SES -->
-    <rect x="210" y="980" width="140" height="80" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="280" y="1005" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Amazon SES</text>
-    <text x="280" y="1023" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Email Delivery</text>
-    <text x="280" y="1038" font-family="Arial" font-size="10" text-anchor="middle" fill="white">DKIM Enabled</text>
-    <text x="280" y="1052" font-family="Arial" font-size="9" text-anchor="middle" fill="white">noreply@traillenshq.com</text>
+<!-- API Gateway: x=20, w=545 -->
+<rect x="20" y="388" width="545" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="292" y="409" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">API Gateway (REST) — Master Gateway</text>
+<text x="292" y="427" font-family="Arial" font-size="10" text-anchor="middle" fill="white">api.traillenshq.com  |  Stage throttle: 5,000 RPS / 2,500 burst  |  Auth: 1,000 RPS</text>
+<text x="292" y="444" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Created by infra/  |  Routes attached by api-dynamo/ via Pulumi StackReference</text>
+<text x="292" y="458" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">WAF attached  |  X-Ray tracing enabled</text>
 
-    <!-- Secrets Manager -->
-    <rect x="370" y="980" width="180" height="80" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="460" y="1005" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Secrets Manager</text>
-    <text x="460" y="1023" font-family="Arial" font-size="10" text-anchor="middle" fill="white">JWT Keys | API Keys</text>
-    <text x="460" y="1038" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Facebook/Instagram Tokens</text>
-    <text x="460" y="1052" font-family="Arial" font-size="9" text-anchor="middle" fill="white">Multi-Tenant Credentials</text>
-  </g>
+<!-- api-dynamo Lambda: x=575, w=290 -->
+<rect x="575" y="388" width="290" height="75" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="720" y="409" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">api-dynamo Lambda</text>
+<text x="720" y="427" font-family="Arial" font-size="11" text-anchor="middle" fill="white">FastAPI + Mangum (ASGI)  |  512MB ARM64</text>
+<text x="720" y="444" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Python 3.14  |  12 route modules</text>
+<text x="720" y="458" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">P95 &lt; 200ms  |  P99 &lt; 500ms  |  ~1,157 RPS</text>
 
-  <!-- EXTERNAL SERVICES -->
-  <g id="external-layer">
-    <text x="650" y="500" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">External Services</text>
+<!-- Social Media Lambda: x=875, w=323 -->
+<rect x="875" y="388" width="323" height="75" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="1036" y="409" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Social Media Lambda</text>
+<text x="1036" y="427" font-family="Arial" font-size="11" text-anchor="middle" fill="white">NestJS + Node.js 22  |  facebook-api/</text>
+<text x="1036" y="444" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Facebook Graph API v19.0  +  Instagram</text>
+<text x="1036" y="458" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">Auto-post on trail condition changes</text>
 
-    <!-- Facebook -->
-    <rect x="650" y="520" width="140" height="60" rx="5" fill="#7ED321" stroke="#232F3E" stroke-width="2"/>
-    <text x="720" y="545" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Facebook</text>
-    <text x="720" y="563" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Pages API</text>
-    <text x="720" y="575" font-family="Arial" font-size="9" text-anchor="middle" fill="white">Graph API v19.0</text>
+<!-- ============================================================ -->
+<!-- LAYER 4: EVENT-DRIVEN LAMBDAS  (y=481 to 655) -->
+<!-- ============================================================ -->
+<rect x="10" y="481" width="1200" height="174" rx="8" fill="#F3E5F5" stroke="#D7BDE2" stroke-width="1"/>
+<text x="24" y="499" font-family="Arial" font-size="13" font-weight="bold" fill="#6C3483">EVENT-DRIVEN LAMBDAS   (api-dynamo/pulumi/ — Python 3.14, ARM64 Graviton2)</text>
 
-    <!-- Instagram -->
-    <rect x="810" y="520" width="140" height="60" rx="5" fill="#7ED321" stroke="#232F3E" stroke-width="2"/>
-    <text x="880" y="545" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Instagram</text>
-    <text x="880" y="563" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Posts + Stories</text>
-    <text x="880" y="575" font-family="Arial" font-size="9" text-anchor="middle" fill="white">Business Accounts</text>
-  </g>
+<!-- push-notification: x=20, w=228 -->
+<rect x="20" y="507" width="228" height="138" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="134" y="528" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">push-notification</text>
+<text x="134" y="546" font-family="Arial" font-size="10" text-anchor="middle" fill="#E8DAEF">256MB ARM64</text>
+<text x="134" y="563" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle" fill="#FAD7A0">&#9654; SNS: TRAIL_CONDITION_CHANGE</text>
+<text x="134" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">iOS &#8594; APNS</text>
+<text x="134" y="596" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Android &#8594; FCM (Firebase)</text>
+<text x="134" y="612" font-family="Arial" font-size="10" text-anchor="middle" fill="white">via AWS SNS Platform Apps</text>
+<text x="134" y="633" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">$0.50/million notifications</text>
 
-  <!-- VPC NETWORK -->
-  <g id="vpc-layer">
-    <rect x="30" y="360" width="540" height="570" rx="10" fill="none" stroke="#879196" stroke-width="3" stroke-dasharray="10,5" opacity="0.5"/>
-    <text x="40" y="380" font-family="Arial" font-size="14" font-weight="bold" fill="#879196">VPC (10.0.0.0/16) - 2 AZs</text>
-    <text x="40" y="920" font-family="Arial" font-size="11" fill="#879196">Private Subnets | NAT Gateways | VPC Endpoints (DynamoDB, S3)</text>
-  </g>
+<!-- sms-notification: x=258, w=228 -->
+<rect x="258" y="507" width="228" height="138" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="372" y="528" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">sms-notification</text>
+<text x="372" y="546" font-family="Arial" font-size="10" text-anchor="middle" fill="#E8DAEF">256MB ARM64</text>
+<text x="372" y="563" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle" fill="#FAD7A0">&#9654; SNS: critical severity</text>
+<text x="372" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">SMS alerts via Amazon SNS</text>
+<text x="372" y="596" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Critical trail closures only</text>
+<text x="372" y="612" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Respects user preferences</text>
+<text x="372" y="633" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">$0.0075/SMS (ca-central-1)</text>
 
-  <!-- INFRASTRUCTURE AS CODE -->
-  <g id="iac-layer">
-    <text x="650" y="700" font-family="Arial" font-size="16" font-weight="bold" fill="#232F3E">Infrastructure</text>
+<!-- email-notification: x=496, w=228 -->
+<rect x="496" y="507" width="228" height="138" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="610" y="528" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">email-notification</text>
+<text x="610" y="546" font-family="Arial" font-size="10" text-anchor="middle" fill="#E8DAEF">256MB ARM64</text>
+<text x="610" y="563" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle" fill="#FAD7A0">&#9654; SNS: TRAIL_CONDITION_CHANGE</text>
+<text x="610" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Email via SES templates</text>
+<text x="610" y="596" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Trail status change alerts</text>
+<text x="610" y="612" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Subscription-based delivery</text>
+<text x="610" y="633" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">$0.10/1,000 emails (SES)</text>
 
-    <rect x="650" y="720" width="300" height="100" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="800" y="745" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Pulumi (Python)</text>
-    <text x="800" y="765" font-family="Arial" font-size="11" text-anchor="middle" fill="white">Infrastructure as Code</text>
-    <text x="800" y="783" font-family="Arial" font-size="10" text-anchor="middle" fill="white">3 Deployment Phases:</text>
-    <text x="800" y="797" font-family="Arial" font-size="9" text-anchor="middle" fill="white">1. Foundation (Network, DB, Auth)</text>
-    <text x="800" y="809" font-family="Arial" font-size="9" text-anchor="middle" fill="white">2. Services (API Gateway, Redis)</text>
+<!-- photo-processor: x=734, w=228 -->
+<rect x="734" y="507" width="228" height="138" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="848" y="528" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">photo-processor</text>
+<text x="848" y="546" font-family="Arial" font-size="10" text-anchor="middle" fill="#E8DAEF">1024MB ARM64</text>
+<text x="848" y="563" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle" fill="#FAD7A0">&#9654; S3: trail-photos (uploads)</text>
+<text x="848" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Thumbnail: 200&#215;200</text>
+<text x="848" y="596" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Medium: 800&#215;600</text>
+<text x="848" y="612" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Large: 1920&#215;1080  |  WebP</text>
+<text x="848" y="633" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">Original preserved</text>
 
-    <!-- Route53 + ACM -->
-    <rect x="650" y="840" width="300" height="70" rx="5" fill="#FF9900" stroke="#232F3E" stroke-width="2"/>
-    <text x="800" y="865" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">Route53 + ACM</text>
-    <text x="800" y="883" font-family="Arial" font-size="10" text-anchor="middle" fill="white">DNS: traillenshq.com</text>
-    <text x="800" y="897" font-family="Arial" font-size="9" text-anchor="middle" fill="white">SSL Certificates (API + Cognito)</text>
-  </g>
+<!-- email-forwarder: x=972, w=228 -->
+<rect x="972" y="507" width="228" height="138" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="1086" y="528" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">email-forwarder</text>
+<text x="1086" y="546" font-family="Arial" font-size="10" text-anchor="middle" fill="#E8DAEF">256MB ARM64</text>
+<text x="1086" y="563" font-family="Arial" font-size="10" font-weight="bold" text-anchor="middle" fill="#FAD7A0">&#9654; SES receipt rules</text>
+<text x="1086" y="580" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Forward inbound emails</text>
+<text x="1086" y="596" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Per-address routing</text>
+<text x="1086" y="612" font-family="Arial" font-size="10" text-anchor="middle" fill="white">YAML routing config</text>
+<text x="1086" y="633" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">mark@buckaway.ca destination</text>
 
-  <!-- ARROWS - Client to Auth -->
-  <path d="M 120 180 L 120 250" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <path d="M 280 180 L 280 250" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <path d="M 460 180 L 300 250" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- ============================================================ -->
+<!-- LAYER 5: AUTH / COGNITO  (y=663 to 820) -->
+<!-- ============================================================ -->
+<rect x="10" y="663" width="1200" height="157" rx="8" fill="#FFF3E0" stroke="#F5CBA7" stroke-width="1"/>
+<text x="24" y="681" font-family="Arial" font-size="13" font-weight="bold" fill="#7E5109">AUTH / COGNITO</text>
 
-  <!-- Auth to API Gateway -->
-  <path d="M 300 320 L 300 390" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- Cognito User Pool: x=20, w=500 -->
+<rect x="20" y="689" width="500" height="121" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="270" y="710" font-family="Arial" font-size="13" font-weight="bold" text-anchor="middle" fill="white">AWS Cognito User Pool</text>
+<text x="270" y="728" font-family="Arial" font-size="10" text-anchor="middle" fill="white">auth.traillenshq.com  |  Deletion Protection: ACTIVE  |  JWT tokens</text>
+<text x="270" y="746" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">Passkey (WebAuthn/FIDO2)  |  Magic Link (15-min TTL)  |  Email/Password</text>
+<text x="270" y="764" font-family="Arial" font-size="10" text-anchor="middle" fill="white">8 Groups: traillenshq-admin, admin, org-admin, trail-owner, trail-crew, trail-status, content-moderator, org-member</text>
+<text x="270" y="781" font-family="Arial" font-size="10" text-anchor="middle" fill="white">JWT claims: sub, email, cognito:groups, custom:organization_id</text>
+<text x="270" y="797" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">Email via SES (no 50/day limit)  |  MFA enforcement for admin roles (7-day grace)</text>
 
-  <!-- API Gateway to Lambdas -->
-  <path d="M 170 450 L 170 520" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <path d="M 430 450 L 430 520" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- Cognito Trigger Lambdas 2x2 grid: start x=530 -->
+<rect x="530" y="689" width="320" height="57" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="690" y="710" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">define-auth-challenge (256MB)</text>
+<text x="690" y="728" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Determines challenge: magic link vs passkey</text>
+<text x="690" y="741" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">&#9654; Cognito Custom Auth Flow</text>
 
-  <!-- Lambdas to DynamoDB -->
-  <path d="M 170 630 L 220 700" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <path d="M 430 630 L 220 700" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<rect x="860" y="689" width="320" height="57" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="1020" y="710" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">create-auth-challenge (256MB)</text>
+<text x="1020" y="728" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Generates magic link token &#8594; DynamoDB + SES</text>
+<text x="1020" y="741" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">&#9654; Cognito Custom Auth Flow</text>
 
-  <!-- Lambda to Redis -->
-  <path d="M 430 630 L 480 700" stroke="#232F3E" stroke-width="2" stroke-dasharray="5,5" fill="none" marker-end="url(#arrowhead)"/>
+<rect x="530" y="754" width="320" height="57" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="690" y="775" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">verify-auth-challenge (256MB)</text>
+<text x="690" y="793" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Validates token, marks used in DynamoDB</text>
+<text x="690" y="806" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">&#9654; Cognito Custom Auth Flow</text>
 
-  <!-- Lambda to S3 -->
-  <path d="M 170 630 L 135 840" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<rect x="860" y="754" width="320" height="57" rx="5" fill="#9B59B6" stroke="#7D3C98" stroke-width="1.5"/>
+<text x="1020" y="775" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">post-authentication (256MB)</text>
+<text x="1020" y="793" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Logs auth events post sign-in</text>
+<text x="1020" y="806" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#E8DAEF">&#9654; Cognito Post-Authentication</text>
 
-  <!-- S3 to CloudFront -->
-  <path d="M 220 875 L 240 875" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- ============================================================ -->
+<!-- LAYER 6: DATA LAYER  (y=828 to 1030) -->
+<!-- ============================================================ -->
+<rect x="10" y="828" width="1200" height="202" rx="8" fill="#EBF5FB" stroke="#AED6F1" stroke-width="1"/>
+<text x="24" y="846" font-family="Arial" font-size="13" font-weight="bold" fill="#1A5276">DATA LAYER</text>
 
-  <!-- Lambda to Secrets -->
-  <path d="M 430 630 L 460 980" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- DynamoDB: x=20, w=680 -->
+<rect x="20" y="854" width="680" height="165" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="2"/>
+<text x="360" y="876" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="white">DynamoDB — Single-Table Design</text>
+<text x="360" y="895" font-family="Arial" font-size="11" font-weight="bold" text-anchor="middle" fill="white">traillens-prod-dynamodb</text>
+<text x="360" y="913" font-family="Arial" font-size="10" text-anchor="middle" fill="white">PK (String) + SK (String) composite primary key</text>
+<text x="360" y="930" font-family="Arial" font-size="10" text-anchor="middle" fill="white">GSI1&#8211;GSI5: overloaded indexes, projection ALL  |  GSI6: geohash geospatial (map bounds queries)</text>
+<text x="360" y="947" font-family="Arial" font-size="10" text-anchor="middle" fill="white">66 access patterns  |  PAY_PER_REQUEST  |  TTL on tokens + temp data  |  PITR: 35 days</text>
+<text x="360" y="964" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Deletion Protection enabled  |  SSE: AWS managed keys (AES-256)</text>
+<text x="360" y="981" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Key patterns: TRAILSYSTEM#{id}, USER#{sub}, MAGICLINK#{token}, CAREREPORT#{id}, ORG#{id}</text>
+<text x="360" y="1001" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">Replaces 21-table normalized design  |  Spec: api-dynamo/docs/dynamodb-spec.json</text>
 
-  <!-- Lambda to SNS -->
-  <path d="M 170 630 L 120 980" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- S3: x=710, w=245 -->
+<rect x="710" y="854" width="245" height="165" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="832" y="876" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Amazon S3</text>
+<text x="832" y="895" font-family="Arial" font-size="10" text-anchor="middle" fill="white">trail-photos (public read, versioned)</text>
+<text x="832" y="912" font-family="Arial" font-size="10" text-anchor="middle" fill="white">&#8594; CloudFront origin for photo CDN</text>
+<text x="832" y="929" font-family="Arial" font-size="10" text-anchor="middle" fill="white">lambda-deployments (private)</text>
+<text x="832" y="946" font-family="Arial" font-size="10" text-anchor="middle" fill="white">static assets  |  email archive</text>
+<text x="832" y="963" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Lifecycle: Glacier after 1 year</text>
+<text x="832" y="980" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Versioning enabled on photos</text>
+<text x="832" y="1000" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">SSE-S3  |  Lifecycle rules all buckets</text>
 
-  <!-- Lambda to SES -->
-  <path d="M 170 630 L 280 980" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- ElastiCache Redis (disabled): x=965, w=230 -->
+<rect x="965" y="854" width="230" height="165" rx="5" fill="#95A5A6" stroke="#7F8C8D" stroke-width="1.5" stroke-dasharray="8,4"/>
+<text x="1080" y="876" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">ElastiCache Redis 7.0</text>
+<text x="1080" y="897" font-family="Arial" font-size="13" font-weight="bold" text-anchor="middle" fill="#F39C12">DISABLED</text>
+<text x="1080" y="916" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Not needed at &lt;500 MAU</text>
+<text x="1080" y="933" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Purpose: session cache</text>
+<text x="1080" y="950" font-family="Arial" font-size="10" text-anchor="middle" fill="white">API response caching</text>
+<text x="1080" y="967" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Enable when DynamoDB reads</text>
+<text x="1080" y="984" font-family="Arial" font-size="10" text-anchor="middle" fill="white">&gt;$50/month (~10K&#8211;25K MAU)</text>
+<text x="1080" y="1001" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#ECF0F1">~$15-30/month when enabled</text>
 
-  <!-- Facebook API to External -->
-  <path d="M 550 575 L 650 550" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <path d="M 550 575 L 810 550" stroke="#232F3E" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+<!-- ============================================================ -->
+<!-- LAYER 7: MESSAGING AND SECRETS  (y=1040 to 1150) -->
+<!-- ============================================================ -->
+<rect x="10" y="1040" width="1200" height="110" rx="8" fill="#FFFDE7" stroke="#F9E79F" stroke-width="1"/>
+<text x="24" y="1058" font-family="Arial" font-size="13" font-weight="bold" fill="#7D6608">MESSAGING &amp; SECRETS</text>
 
-  <!-- Arrow marker definition -->
-  <defs>
-    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <polygon points="0 0, 10 3, 0 6" fill="#232F3E"/>
-    </marker>
-  </defs>
+<!-- SNS: x=20, w=280 -->
+<rect x="20" y="1065" width="280" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="160" y="1085" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Amazon SNS</text>
+<text x="160" y="1103" font-family="Arial" font-size="10" text-anchor="middle" fill="white">trail-status-changes topic</text>
+<text x="160" y="1119" font-family="Arial" font-size="10" text-anchor="middle" fill="white">&#8594; Push / SMS / Email Lambdas</text>
+<text x="160" y="1132" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">APNS (iOS)  |  FCM (Android)</text>
 
-  <!-- COST BOX -->
-  <g id="cost-box">
-    <rect x="650" y="960" width="300" height="100" rx="5" fill="#FFF3CD" stroke="#856404" stroke-width="2"/>
-    <text x="800" y="985" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" fill="#856404">Estimated AWS Costs</text>
-    <text x="800" y="1005" font-family="Arial" font-size="11" text-anchor="middle" fill="#856404">Dev: $75-150/month</text>
-    <text x="800" y="1022" font-family="Arial" font-size="11" text-anchor="middle" fill="#856404">Prod: $200-400/month</text>
-    <text x="800" y="1039" font-family="Arial" font-size="9" text-anchor="middle" fill="#856404">Scales automatically with usage</text>
-    <text x="800" y="1052" font-family="Arial" font-size="9" text-anchor="middle" fill="#856404">(DynamoDB Pay-Per-Request)</text>
-  </g>
+<!-- SES: x=310, w=280 -->
+<rect x="310" y="1065" width="280" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="450" y="1085" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Amazon SES</text>
+<text x="450" y="1103" font-family="Arial" font-size="10" text-anchor="middle" fill="white">traillenshq.com  |  DKIM enabled</text>
+<text x="450" y="1119" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Magic links  |  Alerts  |  Welcome emails</text>
+<text x="450" y="1132" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">Receipt rules &#8594; email-forwarder Lambda</text>
+
+<!-- Secrets Manager: x=600, w=280 -->
+<rect x="600" y="1065" width="280" height="75" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="740" y="1085" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">AWS Secrets Manager</text>
+<text x="740" y="1103" font-family="Arial" font-size="10" text-anchor="middle" fill="white">JWT signing keys  |  Internal API tokens</text>
+<text x="740" y="1119" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Per-org social media credentials</text>
+<text x="740" y="1132" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">KMS encryption  |  Rotation planned</text>
+
+<!-- External APIs: x=890, w=308 -->
+<rect x="890" y="1065" width="308" height="75" rx="5" fill="#7ED321" stroke="#5D9E1A" stroke-width="1.5"/>
+<text x="1044" y="1085" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">External APIs</text>
+<text x="1044" y="1103" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Facebook Graph API v19.0 (Pages)</text>
+<text x="1044" y="1119" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Instagram Graph API (Posts + Stories)</text>
+<text x="1044" y="1132" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D5F5E3">200 calls/hr/token  |  Per-org credentials</text>
+
+<!-- ============================================================ -->
+<!-- LAYER 8: INFRASTRUCTURE  (y=1158 to 1270) -->
+<!-- ============================================================ -->
+<rect x="10" y="1158" width="1200" height="112" rx="8" fill="#F2F3F4" stroke="#BDC3C7" stroke-width="1"/>
+<text x="24" y="1176" font-family="Arial" font-size="13" font-weight="bold" fill="#566573">INFRASTRUCTURE</text>
+
+<!-- VPC: x=20, w=280 -->
+<rect x="20" y="1183" width="280" height="76" rx="5" fill="#5D6D7E" stroke="#48606E" stroke-width="1.5"/>
+<text x="160" y="1203" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">VPC (10.0.0.0/16)</text>
+<text x="160" y="1221" font-family="Arial" font-size="10" text-anchor="middle" fill="white">2 AZs  |  Public + Private Subnets</text>
+<text x="160" y="1237" font-family="Arial" font-size="10" text-anchor="middle" fill="white">NAT Gateways  |  VPC Endpoints</text>
+<text x="160" y="1251" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#CCD1D9">DynamoDB + S3 + Secrets Manager</text>
+
+<!-- CloudWatch: x=310, w=280 -->
+<rect x="310" y="1183" width="280" height="76" rx="5" fill="#FF9900" stroke="#E67E22" stroke-width="1.5"/>
+<text x="450" y="1203" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">CloudWatch + X-Ray</text>
+<text x="450" y="1221" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Lambda alarms  |  Logs  |  Traces</text>
+<text x="450" y="1237" font-family="Arial" font-size="10" text-anchor="middle" fill="white">P95/P99 latency monitoring</text>
+<text x="450" y="1251" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#FAD7A0">Error rate + throttle + 5XX alarms</text>
+
+<!-- Pulumi IaC: x=600, w=280 -->
+<rect x="600" y="1183" width="280" height="76" rx="5" fill="#4A90E2" stroke="#2C7BE5" stroke-width="1.5"/>
+<text x="740" y="1203" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">Pulumi IaC — Python</text>
+<text x="740" y="1221" font-family="Arial" font-size="10" text-anchor="middle" fill="white">infra/ &#8594; api-dynamo/ &#8594; webui/</text>
+<text x="740" y="1237" font-family="Arial" font-size="10" text-anchor="middle" fill="white">StackReference pattern  |  50+ outputs</text>
+<text x="740" y="1251" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#D6EAF8">infra/ deploys NO Lambda functions</text>
+
+<!-- AWS Region: x=890, w=308 -->
+<rect x="890" y="1183" width="308" height="76" rx="5" fill="#5D6D7E" stroke="#48606E" stroke-width="1.5"/>
+<text x="1044" y="1203" font-family="Arial" font-size="12" font-weight="bold" text-anchor="middle" fill="white">AWS ca-central-1</text>
+<text x="1044" y="1221" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Canada Central (Montreal)</text>
+<text x="1044" y="1237" font-family="Arial" font-size="10" text-anchor="middle" fill="white">Single prod environment  |  &lt;500 MAU</text>
+<text x="1044" y="1251" font-family="Arial" font-size="9" font-style="italic" text-anchor="middle" fill="#CCD1D9">Multi-env deferred until 10K+ MAU</text>
+
+<!-- FOOTER -->
+<text x="700" y="1285" font-family="Arial" font-size="11" text-anchor="middle" fill="#95A5A6">TrailLensHQ System Architecture v3.0  |  April 2026  |  ca-central-1  |  10 Lambda functions  |  Single-table DynamoDB (66 access patterns, 6 GSIs)  |  100K DAU design target</text>
+
 </svg>

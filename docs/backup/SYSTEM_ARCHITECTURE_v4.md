@@ -11,12 +11,12 @@ ORIGINAL PROMPT (January 13, 2026)
 ---
 title: "TrailLensHQ System Architecture"
 author: "Chief Architect"
-date: "April 2026"
+date: "January 2026"
 abstract: "Technical architecture overview of TrailLensHQ's modern serverless AWS infrastructure including scaling, security, multi-tenancy, and cost projections."
 ---
 
 # TrailLensHQ System Architecture
-**Chief Architect Report to CEO | April 2026 | Document Version 3.0**
+**Chief Architect Report to CEO | January 2026 | Document Version 2.0**
 
 **📊 IMPORTANT: For detailed cost analysis with complete calculations, usage methodologies, and verified AWS pricing references, see:**
 **→ [COST_ANALYSIS_DETAILED.md](COST_ANALYSIS_DETAILED.md)**
@@ -82,37 +82,25 @@ The diagram above shows the complete system architecture including all client ap
 - **Repository:** Same repository as user app (separate app target)
 - **Status:** REQUIRED for MVP
 
-#### **Android Mobile Apps** (Native Kotlin, Active Development)
+#### **Android Mobile App** (Native Kotlin, Post-MVP)
 
 - **Platform:** Google Play Store
-- **Purpose:** Same functionality as iOS apps (user + admin), built from the ground up in Kotlin
-- **Authentication:** AWS Cognito SDK (passkey, magic link, email/password)
-- **Push Notifications:** FCM (Firebase Cloud Messaging) via AWS SNS
-- **Key Features:**
-  - Trail system discovery and real-time status
-  - Trail Care Report submission with camera integration
-  - Offline capability with local sync queue
-  - Organization management (admin app)
-- **Repositories:** Three linked repos via Gradle composite build:
-  - `androiduser/` — User app (`com.traillenshq.app`)
-  - `androidadmin/` — Admin app (`com.traillenshq.admin`)
-  - `androidrestapi/` — Shared REST API client library (`com.traillenshq.api`, 71 endpoints)
-- **Stack:** Kotlin 2.3.20, Jetpack Compose, Hilt 2.59.2, Retrofit 3.0.0
-- **Status:** Active development
+- **Purpose:** Same functionality as iOS apps (user + admin)
+- **Status:** Android version to follow after iOS MVP launch
 
-#### **Web Application** (`webui/` — React 19 + Tailwind CSS 4.x)
+#### **Web Application** (React 18 + Tailwind CSS)
 - **Platform:** AWS Amplify + CloudFront CDN
-- **Framework:** React 19 with React Router v7
-- **Styling:** Tailwind CSS 4.x
-- **Design:** Ground-up rebuild with latest libraries — no legacy template dependencies
-- **Pages:** Covers all tiers:
-  - **Public Tier:** Marketing, trail directory, pricing (no auth)
-  - **Auth Tier:** Login, passkey registration, magic link
+- **Framework:** React 18 with React Router v6
+- **Styling:** Tailwind CSS 3.4.13
+- **Pages:** 26 implemented pages across 4 tiers:
+  - **Public Tier:** Marketing, blog, trail directory, pricing (no auth)
+  - **Auth Tier:** Login, register, password reset
   - **Organization Tier:** Dashboard, team management, trail admin
   - **User Tier:** Personal dashboard, subscriptions, settings
+- **Testing:** 88% test coverage
 - **Deployment:** Automated via AWS Amplify (git push triggers build/deploy)
 - **Global CDN:** CloudFront delivers content from edge locations worldwide
-- **Status:** Active development (replaces legacy `web/` frontend)
+- **Status:** Phase 4 complete, production-ready
 
 ### 2. API Layer
 
@@ -126,27 +114,22 @@ The diagram above shows the complete system architecture including all client ap
   - Application repositories (api-dynamo, facebook-api) attach their routes via StackReference
   - Single unified API endpoint for all services
 
-#### **Main API Service** (FastAPI + Python 3.14)
-- **Runtime:** AWS Lambda (serverless compute), ARM64 (Graviton2), 512 MB
+#### **Main API Service** (FastAPI + Python 3.13)
+- **Runtime:** AWS Lambda (serverless compute)
 - **Framework:** FastAPI with Mangum adapter (ASGI to Lambda)
-- **Architecture:** Spec-driven code generation from OpenAPI 3.1.0 + DynamoDB spec; layered Routes → Services → Repositories → DynamoDB
-- **Route Modules:**
-  - `auth` — Passkey (WebAuthn/FIDO2) registration and authentication
-  - `magic_link` — Cross-device passwordless auth token lookup
-  - `trail_systems` — CRUD, condition updates, status history, notifications
-  - `users` — User profiles, authentication, role management
-  - `organizations` — Org CRUD, members, roles
-  - `devices` — Push notification device registration (APNS/FCM)
-  - `notifications` — Notification preference management
-  - `care_reports` — Trail Care Report create/update/query
-  - `condition_observations` — TrailPulse condition observations (6 endpoints)
-  - `scheduled_condition` — Scheduled status/condition management
-  - `tags` — Trail system tagging
-  - `content` — Static content (FAQ, etc.)
-- **Database:** Single-table DynamoDB (66 access patterns, 6 GSIs)
-- **Performance:** P95 latency < 200ms, P99 < 500ms, ~1,157 RPS sustained
-- **Testing:** 90%+ test coverage (pytest + moto `mock_aws`)
-- **Deployment:** ZIP packaged, uploaded to S3, deployed to Lambda via Pulumi
+- **Endpoints:** 60+ REST endpoints organized by domain:
+  - Users: Profile, preferences, notifications, dashboard
+  - Trails: CRUD operations, search, status updates, analytics
+  - Reviews: Create, read, update ratings with photos
+  - Photos: Upload, storage, retrieval
+  - Forums: Topics, replies, moderation
+  - Events: Calendar, RSVP, attendance tracking
+  - Volunteers: Opportunities, signups, hours tracking
+  - Organizations: Management, membership, settings
+  - Content: Blog, FAQ, testimonials, case studies
+- **Testing:** 80%+ test coverage (pytest + moto for AWS mocking)
+- **Deployment:** Packaged as ZIP, uploaded to S3, deployed to Lambda
+- **Status:** Phase 3 complete (search/discovery operational)
 
 #### **Social Media API** (NestJS + Node.js 22)
 - **Runtime:** AWS Lambda (serverless compute)
@@ -165,28 +148,7 @@ The diagram above shows the complete system architecture including all client ap
 - **Deployment:** Packaged as ZIP, uploaded to S3, deployed to Lambda
 - **Status:** 80% complete (AWS deployment pending)
 
-### 3. Lambda Functions (Python 3.14, ARM64 Graviton2)
-
-All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/` repository deploys **no Lambda functions** — it creates only shared infrastructure (DynamoDB, S3, Cognito, SNS, SES domain, API Gateway master) consumed via Pulumi StackReference.
-
-| Lambda | Memory | Trigger | Purpose |
-|--------|--------|---------|---------|
-| `api-dynamo` | 512MB | API Gateway | Main FastAPI REST API (Mangum adapter) |
-| `push-notification` | 256MB | SNS: TRAIL_CONDITION_CHANGE | Push notifications to iOS (APNS) / Android (FCM) |
-| `sms-notification` | 256MB | SNS: critical severity | SMS alerts via SNS |
-| `email-notification` | 256MB | SNS: TRAIL_CONDITION_CHANGE | Email alerts via SES templates |
-| `photo-processor` | 1024MB | S3: photo uploads | Resize to thumbnail/medium/large WebP variants |
-| `email-forwarder` | 256MB | SES receipt rules | Forward incoming emails per YAML config |
-| `define-auth-challenge` | 256MB | Cognito trigger | Determines challenge type (magic link vs passkey) |
-| `create-auth-challenge` | 256MB | Cognito trigger | Generates magic link token, stores in DynamoDB, sends via SES |
-| `verify-auth-challenge` | 256MB | Cognito trigger | Validates magic link token, marks as used |
-| `post-authentication` | 256MB | Cognito trigger | Logs auth events post sign-in |
-
-**Runtime:** Python 3.14, ARM64 (Graviton2) for all Lambdas.
-**Deployment:** All Lambdas are packaged as ZIP, uploaded to S3, deployed via `api-dynamo/pulumi/`.
-**Monitoring:** CloudWatch log groups, X-Ray tracing, P95 < 200ms / P99 < 500ms targets.
-
-### 4. Authentication & Authorization
+### 3. Authentication & Authorization
 
 #### **AWS Cognito User Pool**
 - **Purpose:** User authentication and identity management
@@ -215,64 +177,72 @@ All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/
   - `org-member`: Basic organization member
 - **Email Integration:** Uses Amazon SES for sending (no 50/day limit)
 
-### 5. Data Layer
+### 4. Data Layer
 
-#### **Amazon DynamoDB** (Single-Table Design)
+#### **Amazon DynamoDB** (21 Tables - MVP v1.13)
+- **Billing Model:** Pay-Per-Request (on-demand)
+  - No capacity planning required
+  - Automatically scales to handle traffic
+  - Pay only for reads/writes actually performed
+- **Backup:** Point-in-Time Recovery (PITR) enabled on all tables
+  - Continuous backups for 35 days
+  - Restore to any second in the last 35 days
+- **Encryption:** Server-side encryption with AWS managed keys
+- **Global Secondary Indexes (GSIs):** Optimized for query patterns
 
-All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using composite key patterns. This replaced a multi-table design to reduce operational overhead, lower cost, and enable atomic cross-entity transactions.
+**Table Inventory (MVP v1.13):**
 
-- **Billing Model:** PAY_PER_REQUEST (on-demand) — zero idle cost, automatic scaling
-- **Backup:** Point-in-Time Recovery (PITR) enabled — continuous backups for 35 days
-- **Encryption:** Server-side encryption with AWS managed keys (AES-256)
-- **Deletion Protection:** Enabled (prevents accidental table drops)
+**Core Trail System Management:**
+1. **trail_systems** - Trail system data (replaces individual trails concept; each system contains multiple trails managed as one unit)
+2. **trail_system_history** - Audit log of trail system status changes (2-year retention)
+3. **status_tags** - Status categorization tags (max 10 per organization)
+4. **scheduled_status_changes** - Pre-scheduled status changes with automated cron job processing
 
-**Key Schema:**
+**Trail Care Reports (New in MVP v1.13):**
+5. **trail_care_reports** - Unified issue tracking system (P1-P5 priority, public/private visibility flag, type tags, assignment workflow)
+6. **trail_care_report_comments** - Crew update comments on reports with optional photos
+7. **care_report_type_tags** - Report categorization tags (max 25 per organization: "maintenance", "hazard", "tree-down", etc.)
 
-| Key | Type | Purpose |
-|-----|------|---------|
-| `PK` | String | Partition key (entity prefix + ID, e.g. `TRAILSYSTEM#abc`) |
-| `SK` | String | Sort key (entity type or relationship, e.g. `METADATA`) |
-| `GSI1PK` / `GSI1SK` | String | Overloaded index for access pattern flexibility |
-| `GSI2PK` / `GSI2SK` | String | Overloaded index |
-| `GSI3PK` / `GSI3SK` | String | Overloaded index |
-| `GSI4PK` / `GSI4SK` | String | Overloaded index |
-| `GSI5PK` / `GSI5SK` | String | Overloaded index |
-| `GSI6PK` / `GSI6SK` | String | Geohash-based geospatial index (map bounds trail queries) |
-| `ttl` | Number | TTL — automatic item expiration (used for tokens, temp data) |
+**User Management:**
+8. **users** - User profiles with email lowercase index for duplicate prevention
+9. **devices** - Device registration for push notifications (APNS/FCM for iPhone apps)
 
-**Entity Key Pattern Examples:**
+**Community Features:**
+10. **trail_reviews** - Reviews with user and rating indexes for sorting
+11. **trail_photos** - Photo metadata with S3 URLs (5MB max per photo)
+12. **forum_topics** - Discussion topics with category index
+13. **forum_replies** - Forum replies with topic index
+14. **events** - Calendar events with organization and date indexes
+15. **event_rsvps** - Event attendance tracking
+16. **volunteer_opportunities** - Volunteer opportunity listings
+17. **volunteer_signups** - Volunteer registration tracking
 
-| Entity | PK | SK |
-|--------|----|----|
-| Trail system | `TRAILSYSTEM#{id}` | `METADATA` |
-| Trail system (by slug) | `TRAILSYSTEM_SLUG#{slug}` *(GSI1)* | `TRAILSYSTEM#{id}` |
-| User profile | `USER#{cognito_sub}` | `PROFILE` |
-| Passkey credential | `USER#{id}` | `PASSKEY#{cred_id}` |
-| Magic link token | `MAGICLINK#{token}` | `TOKEN` |
-| WebAuthn challenge | `CHALLENGE#{id}` | `CHALLENGE` |
-| Device registration | `USER#{id}` | `DEVICE#{device_id}` |
-| Condition observation | `TRAILSYSTEM#{id}` | `OBS#{timestamp}` |
-| Care report | `CAREREPORT#{id}` | `METADATA` |
-| Organization member | `ORG#{org_id}` *(GSI5)* | `USER#{user_id}` |
+**Business Operations:**
+18. **demo_requests** - Sales demo request submissions
+19. **partner_applications** - Partnership application tracking
+20. **testimonials** - Customer testimonials
+21. **case_studies** - Case study content
 
-**Access Patterns:** 66 defined patterns — full spec in `api-dynamo/docs/dynamodb-spec.json`
+**Data Retention Policies (MVP v1.13):**
+- User accounts: 2 years inactive
+- Trail system status history: 2 years
+- Trail Care Reports (active): Kept indefinitely (open/in-progress/deferred/resolved)
+- Trail Care Reports (closed/cancelled): 2 years
+- Trail Care Report photos: 180 days after report closure
+- Other photos: Standard lifecycle (Glacier after 1 year)
 
-**Data Retention via TTL:**
-- Magic link tokens: 15-minute TTL
-- WebAuthn challenges: Short-lived TTL
-- Refresh tokens: 30-day TTL
-- Condition observations: 30-day TTL
-- Trail system status history: 2-year retention
-- Trail Care Reports (closed/cancelled): 2-year retention
-- Care report photos: 180 days after report closure
+**Total Storage:** Currently <1GB across all tables (dev)
 
-#### **Amazon ElastiCache (Redis 7.0)** — Optional
-- **Status:** Disabled (not currently needed at <500 MAU)
-- **Purpose:** Session caching, API response caching
-- **When to Enable:** When DynamoDB read costs exceed $50/month (approximately 10K–25K MAU)
+#### **Amazon ElastiCache (Redis 7.0)** - Optional
+- **Status:** Disabled by default (not currently needed)
+- **Purpose:** Session caching, API response caching (when needed)
+- **Configuration:**
+  - Dev: Single node, `cache.t4g.micro` (0.5GB RAM)
+  - Prod: 2 nodes (multi-AZ), `cache.t4g.small` (1.5GB RAM)
+- **When to Enable:** When search queries exceed 500 trails or >1000 concurrent users
 - **Estimated Cost:** $15-30/month (when enabled)
 
-### 6. Storage Layer
+### 5. Storage Layer
 
 #### **Amazon S3 (Simple Storage Service)**
 
@@ -311,7 +281,7 @@ All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using co
 - **HTTPS:** Required, uses ACM certificate
 - **Performance:** Sub-100ms photo load times globally
 
-### 7. Messaging & Notifications
+### 6. Messaging & Notifications
 
 #### **Amazon SNS (Simple Notification Service)**
 - **Purpose:** Push notification delivery to mobile devices
@@ -354,7 +324,7 @@ All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using co
   - Granular IAM access control
 - **Cost:** $0.40 per secret per month + $0.05 per 10,000 API calls
 
-### 8. Network Architecture (VPC)
+### 7. Network Architecture (VPC)
 
 #### **Amazon VPC (Virtual Private Cloud)**
 - **CIDR Block:** `10.0.0.0/16` (65,536 IP addresses)
@@ -381,42 +351,32 @@ All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using co
 - **Redis Security Group:** Allows inbound TCP 6379 only from Lambda security group
 - **Default Deny:** All inbound traffic denied by default
 
-### 9. Infrastructure Management
-
-#### **Deployment Ownership Split**
-
-Infrastructure and application code deploy independently via separate Pulumi stacks:
-
-| Repository | Deploys |
-|------------|---------|
-| `infra/` | VPC + networking, DynamoDB table, S3 buckets, Cognito user pool, API Gateway (master), SNS topics, SES domain identity, Secrets Manager, CloudFront, Route53, ACM, CloudWatch alarms |
-| `api-dynamo/` | All 10 Lambda functions, API routes attached to master gateway (via StackReference) |
-| `webui/` | AWS Amplify app (React 19, Tailwind 4.x) |
-
-**Deployment Order:** `infra/` → `api-dynamo/` → `webui/`
-
-`api-dynamo/` reads `infra/` outputs via Pulumi StackReference to resolve Lambda execution roles, DynamoDB table name, Cognito pool ARN, S3 bucket names, SNS topic ARNs, and API Gateway ID. No Lambda functions are deployed by `infra/`.
+### 8. Infrastructure Management
 
 #### **Pulumi (Infrastructure as Code)**
 - **Language:** Python
 - **Purpose:** Define and deploy all AWS infrastructure
-- **Foundation Phase** (parallel deployment):
-  - Network (VPC, subnets, NAT, security groups)
-  - Storage (S3 buckets with lifecycle rules)
-  - Database (DynamoDB single table with 6 GSIs)
-  - Authentication (Cognito user pool + triggers)
-  - Email (SES domain identity, DKIM, receipt rules)
-  - Messaging (SNS topics)
-  - Secrets (Secrets Manager)
-- **Services Phase** (depends on Foundation):
-  - API Gateway (master REST API)
-  - Redis (optional, disabled at <500 MAU)
-- **DNS & Certificates Phase** (depends on Services):
-  - Route53 records, ACM certificates, custom domains
+- **Deployment Phases:**
+  1. **Foundation** (parallel deployment):
+     - Network (VPC, subnets, NAT, security groups)
+     - Storage (S3 buckets)
+     - Database (DynamoDB tables)
+     - Authentication (Cognito)
+     - Email (SES)
+     - Messaging (SNS)
+     - Secrets (Secrets Manager)
+  2. **Services** (depends on Phase 1):
+     - API Gateway
+     - Redis (optional)
+  3. **DNS & Certificates** (depends on Phase 2):
+     - Route53 records
+     - ACM certificates
+     - Custom domains
 - **Benefits:**
-  - Reproducible deployments
+  - Reproducible deployments (dev/staging/prod identical)
   - Version-controlled infrastructure (git history)
   - Disaster recovery (redeploy from code)
+  - Environment consistency
 - **Stack Outputs:** 50+ outputs exported for application consumption via StackReference
 
 #### **AWS Route53 + ACM**
@@ -432,7 +392,7 @@ Infrastructure and application code deploy independently via separate Pulumi sta
   - `auth.traillenshq.com` → Cognito CloudFront distribution
   - `www.traillenshq.com` → Amplify web app
 
-### 10. External Service Integrations
+### 9. External Service Integrations
 
 #### **Facebook Graph API**
 - **Version:** v19.0
@@ -993,12 +953,11 @@ The system is **production-ready** and positioned for sustainable growth from MV
 |---------|------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1.0     | 2026-01-13 | Chief Architect | Initial system architecture document created for CEO review                                                                                                                                                                                                                                                                                                                                       |
 | 2.0     | 2026-01-17 | Chief Architect | Updated to reflect MVP v1.13: 21 DynamoDB tables (trail systems model, Trail Care Reports with 3 new tables), iPhone apps with offline support (User + Admin apps), three authentication methods (passkey, magic link, email/password with 12 char min), security hardening requirements (CloudTrail 1-year, WAF, Security Hub, GuardDuty, secrets 180-day rotation, MFA 7-day grace, incident response plan), data retention policies (2-year history, status-based care reports, 180-day photo retention) |
-| 3.0     | 2026-04-03 | Chief Architect | Updated to reflect single-table DynamoDB design (1 table with 6 GSIs replacing 21 normalized tables, 66 access patterns), 10 Lambda functions all owned by api-dynamo (push/SMS/email notifications, photo processor, email forwarder, 4 Cognito auth triggers), new API routes (magic link, condition observations, scheduled conditions, tags), Android apps in active development (Kotlin 2.3.20 / Jetpack Compose, 3 repos), webui/ as current React 19 / Tailwind 4.x web frontend replacing legacy web/, deployment ownership split clarified (infra/ deploys shared resources, api-dynamo/ deploys all Lambdas) |
 
 ---
 
 **Prepared by:** Chief Architect
-**Date:** April 2026
-**Document Version:** 3.0
+**Date:** January 2026
+**Document Version:** 2.0
 **AWS Region:** ca-central-1 (Canada Central)
 **Environment:** Development (Production deployment pending)
