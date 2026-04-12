@@ -2,7 +2,7 @@
 title: "TrailLensHQ MVP Implementation Project Plan"
 author: "Chief Development Manager"
 date: "January 2026"
-abstract: "Comprehensive implementation plan for TrailLensHQ MVP v1.13 covering 14 phases, dependencies, timelines, and success criteria with AI-assisted development approach."
+abstract: "Comprehensive implementation plan for TrailLensHQ MVP v1.13 covering 14 phases, dependencies, timelines, and success criteria with AI-assisted development approach. V4: Android-first mobile, single-table DynamoDB, webui/ greenfield rewrite."
 ---
 
 <!--
@@ -34,7 +34,7 @@ Add this prompt to to the top of the new file.
 
 ---
 
-DOCUMENT STATUS: V3 - Passkey MFA Misconception Corrected
+DOCUMENT STATUS: V4 - Android Priority, Single-Table DynamoDB, WebUI Rewrite
 
 V2 RESEARCH SUMMARY:
 - Task 3.1: AWS Cognito native passkey support confirmed (Nov 2024 launch)
@@ -55,6 +55,23 @@ V3 CORRECTIONS:
 - Passkeys provide stronger authentication than password + SMS/TOTP MFA
 
 All technical unknowns have been researched and resolved with authoritative AWS documentation references.
+
+V4 UPDATES - MARCH 2026:
+- CRITICAL: Android apps now replace iOS as first mobile priority; both platforms in MVP
+- Phase 12 renamed from "iPhone Apps" to "Mobile Apps (Android + iOS)" — Android-first with Kotlin/Compose
+- Android User App: 36 screens (Kotlin 2.0+, Jetpack Compose, Material Design 3, Hilt DI, Room, FCM)
+- Android Admin App: 42 screens (same stack, admin role gate, conditions/care reports/team management)
+- Figma mockups accelerating design for both Android apps
+- iOS remains in MVP as parallel track (Swift/SwiftUI) with same level of detail as Android
+- Post-MVP: Consider consolidating User + Admin into single app per platform
+- DynamoDB: Updated from 21-table multi-table to single-table design with entity prefixes (ORG#, USER#, TRAILSYSTEM#, REPORT#, etc.)
+- Current production: 7-table multi-table design (ADR-001); single-table is scale target
+- 5 overloaded GSIs, 78 access patterns, 16 MVP entity types, TTL for transient data
+- WebUI: web/ replaced by webui/ — greenfield React 19 + TypeScript + Vite 6.x + Tailwind CSS 4.x
+- WebUI stack: shadcn/ui + Tremor + Lucide React, Zustand 5.x + React Query 5.x
+- Feature-based organization, 5-tier routing, 5 auth methods, all routes lazy-loaded
+- Push notifications: SNS → FCM (Android) + SNS → APNS (iOS)
+- Out of Scope updated: "Android apps" removed, "iOS/Android app consolidation" added
 -->
 
 # TrailLensHQ MVP Implementation Project Plan
@@ -71,18 +88,18 @@ This document provides a comprehensive implementation plan for **TrailLensHQ MVP
 - **14 Implementation Phases**: From brand messaging to testing and validation
 - **Target Launch**: Q2 2026 (April-June 2026)
 - **Pilot Organizations**: Hydrocut (1 trail system with Glasgow and Synders areas) and GORBA (Guelph Lake + Akell)
-- **Development Approach**: AI-assisted development with Claude Sonnet 4.5 for accelerated delivery
+- **Development Approach**: AI-assisted development with Claude Sonnet 4.6 / Claude Opus 4.6 for accelerated delivery
 
 **Key Context:**
-- **Existing Codebase**: Exploratory prototype exists in `api-dynamo/`, `web/`, and `infra/` repositories
+- **Existing Codebase**: Exploratory prototype exists in `api-dynamo/`, `webui/`, and `infra/` repositories (`web/` deprecated, replaced by `webui/`)
 - **Current State**: ~60-70% of core infrastructure and features implemented
-- **Net-New Development**: iPhone apps (User + Admin), Trail Care Reports system, tag-based status, security hardening
+- **Net-New Development**: Mobile apps — Android (User + Admin) and iOS (User + Admin), Trail Care Reports system, tag-based status, security hardening
 - **AI-Assisted Timeline**: 45-75 days (vs. 83-122 days traditional development)
 
 **Critical Success Factors:**
 - All 14 phases MUST be completed before launch
 - Security hardening (Phase 2) is REQUIRED before handling production data
-- iPhone apps (Phase 12) are REQUIRED for MVP - cannot launch without them
+- Mobile apps (Phase 12) are REQUIRED for MVP - cannot launch without them (Android-first, iOS parallel track)
 - Pilot onboarding (Phase 13) must be white-glove quality
 
 ---
@@ -104,7 +121,7 @@ This document provides a comprehensive implementation plan for **TrailLensHQ MVP
 13. [Phase 9: Trail Care Reports System](#phase-9-trail-care-reports-system)
 14. [Phase 10: Notification System](#phase-10-notification-system)
 15. [Phase 11: Web Dashboards](#phase-11-web-dashboards)
-16. [Phase 12: iPhone Apps](#phase-12-iphone-apps)
+16. [Phase 12: Mobile Apps (Android + iOS)](#phase-12-mobile-apps-android--ios)
 17. [Phase 13: Pilot Onboarding](#phase-13-pilot-onboarding)
 18. [Phase 14: Testing and Validation](#phase-14-testing-and-validation)
 19. [Dependencies and Critical Path](#dependencies-and-critical-path)
@@ -158,13 +175,18 @@ This document provides a comprehensive implementation plan for **TrailLensHQ MVP
   - API rate limiting (100 req/min per user)
   - **Post-MVP**: Security Hub (compliance monitoring), GuardDuty (threat detection)
 
-**4. iPhone Apps (REQUIRED)**
-- **User App**: Trail system discovery, status viewing, care report submission, offline support
-- **Admin App**: Trail system management, full care report CRUD, work logs, offline support
-- TestFlight distribution for MVP
-- Push notifications (APNS via AWS SNS)
+**4. Mobile Apps (REQUIRED)**
+- **Android User App** (com.traillens.app): 36 screens — trail system discovery, status viewing, care report submission, TrailPulse observations, offline support (Kotlin 2.0+, Jetpack Compose, Material Design 3, Hilt DI, Room, FCM)
+- **Android Admin App** (com.traillens.admin): 42 screens — trail system management, full care report CRUD, conditions management, team/user management, work logs, offline support (same tech stack, admin role validation gate)
+- **iOS User App**: Same feature set as Android User App (Swift/SwiftUI, Core Data, APNS)
+- **iOS Admin App**: Same feature set as Android Admin App (Swift/SwiftUI, Core Data, APNS)
+- Figma mockups driving design for all mobile apps
+- Android distribution: Google Play internal testing track for MVP
+- iOS distribution: TestFlight for MVP
+- Push notifications: FCM via AWS SNS (Android), APNS via AWS SNS (iOS)
 - Offline status caching (7 days)
 - Offline report creation with auto-upload
+- Post-MVP: Consider consolidating User + Admin into single app per platform
 
 **5. Web Dashboards**
 - Role-specific dashboards (8 roles)
@@ -177,13 +199,23 @@ This document provides a comprehensive implementation plan for **TrailLensHQ MVP
 **6. Notification System**
 - Email notifications (AWS SES)
 - SMS notifications (AWS Pinpoint)
-- Push notifications (SNS → APNS for iPhone)
+- Push notifications (SNS → FCM for Android, SNS → APNS for iOS)
 - Subscription management
 - Notification preferences
 
+**7. TrailPulse - User Condition Observations (REQUIRED)**
+- User-submitted trail condition observations using org-defined condition tags
+- Observation summary with tag distribution (24h/7d aggregation)
+- Admin observation management (view, mark viewed/closed, delete)
+- Rate limiting (1 observation per user per trail system per 24h)
+- 30-day observation retention (DynamoDB TTL auto-cleanup)
+- Organization membership enforcement on all user endpoints
+- **MVP Scope**: 6 API endpoints for condition observations (subset of full TrailPulse spec)
+- **Deferred**: GPS geofencing, ride detection, post-ride notifications, crew management, frequency-based questions
+
 ### Out of Scope for MVP
 
-- Android apps (post-MVP)
+- iOS/Android app consolidation (User + Admin into single app per platform — post-MVP)
 - Social media automation (Facebook/Instagram API)
 - Community features (forums, events, volunteer hub)
 - Reviews and ratings
@@ -287,7 +319,7 @@ This project leverages **Claude Sonnet 4.5** for AI-assisted development, signif
 - Unit test coverage: 80%+ for new code
 - Integration tests for all API endpoints
 - E2E tests for critical user flows
-- Manual testing for iPhone apps (TestFlight)
+- Manual testing for mobile apps (Google Play internal track / TestFlight)
 - Security scanning (no secrets in code)
 
 ### Testing Strategy
@@ -295,7 +327,7 @@ This project leverages **Claude Sonnet 4.5** for AI-assisted development, signif
 **Unit Testing:**
 - Python: pytest with 80%+ coverage
 - TypeScript: Jest/Vitest for React components
-- Swift: XCTest for iPhone apps
+- Android: JUnit + Compose UI tests; iOS: XCTest for mobile apps
 
 **Integration Testing:**
 - API endpoint tests with real DynamoDB (LocalStack or dev environment)
@@ -304,7 +336,7 @@ This project leverages **Claude Sonnet 4.5** for AI-assisted development, signif
 
 **End-to-End Testing:**
 - Critical user workflows (trail system creation, status update, care report submission)
-- iPhone app flows (TestFlight manual testing)
+- Mobile app flows (Google Play internal track / TestFlight manual testing)
 - Cross-browser testing for web (Chrome, Safari, Firefox)
 
 **Performance Testing:**
@@ -316,7 +348,7 @@ This project leverages **Claude Sonnet 4.5** for AI-assisted development, signif
 
 **Required Documentation:**
 - API documentation (auto-generated from OpenAPI spec)
-- User documentation (how to use web app and iPhone apps)
+- User documentation (how to use web app and mobile apps)
 - Admin documentation (trail crew and org-admin guides)
 - Developer documentation (setup, architecture, deployment)
 - Pilot onboarding guides (step-by-step for Hydrocut and GORBA)
@@ -350,32 +382,44 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 
 **Needs Updates For MVP:**
 - **Trail Systems Model**: Currently uses individual trails, needs refactor to trail systems (collections)
-- **Trail Care Reports**: Net-new tables and endpoints (trail_care_reports, trail_care_report_comments, care_report_type_tags)
-- **Tag-Based Status**: New status_tags table and tag assignment logic
-- **Scheduled Status Changes**: New table and cron job for automated processing
+- **Trail Care Reports**: Net-new entity types and endpoints (REPORT#, COMMENT#, TYPE_TAG# entities in single-table design)
+- **Tag-Based Status**: New condition tag entity type (CONDITION_TAG#) and tag assignment logic
+- **Scheduled Status Changes**: New scheduled change entity type (SCHEDULED_CHANGE#) and cron job for automated processing
 - **Three Authentication Methods**: Add passkey and magic link support (currently only email/password)
 - **API Rate Limiting**: Enable and test throttling configuration
 - **Data Retention**: Implement automated cleanup jobs for 2-year retention policies
 
 **Estimated Work**: 20-30 days (AI-assisted)
 
-### web/ (React Frontend)
+### web/ (React Frontend — DEPRECATED)
 
 **Current State:**
-- React 18 with Tailwind CSS 3.4.13
-- 26 implemented pages across 4 tiers
-- 88% test coverage
-- Responsive design
-- AWS Amplify hosting configured
+- React 18 with Tailwind CSS 3.4.13 — **DEPRECATED, replaced by webui/**
+- Significant technical debt from Notus React starter template (custom pixel values, CommonJS config, prop-types, gulp build tools, type-based organization)
+- Retained as reference only; all new development in webui/
+
+**Estimated Work**: 0 days (no further development on web/)
+
+### webui/ (React Frontend — ACTIVE)
+
+**Current State:**
+- Greenfield rewrite of web/ — React 19 + TypeScript strict mode + Vite 6.x + Tailwind CSS 4.x
+- UI libraries: shadcn/ui (Radix primitives + Tailwind), Tremor (charts/dashboards), Lucide React (icons)
+- State: Zustand 5.x (client state) + React Query 5.x (server state)
+- Auth: AWS Amplify 6.x, amazon-cognito-identity-js, @github/webauthn-json (passkeys)
+- Feature-based organization (auth/, admin/, organization/, user/, trails/, public/)
+- 5-tier routing: Public, Auth, Admin, Organization, User
+- 5 auth methods: Passwordless, Magic Link, Passkey, Social Login, Admin Login (hidden)
+- All routes lazy-loaded with React.lazy() and Suspense boundaries
+- Testing: Vitest 3.x + React Testing Library 16.x + Playwright 1.57
 
 **Needs Updates For MVP:**
-- **Brand Messaging**: Update homepage byline to "Building communities, one trail at a time"
-- **Trail Systems UI**: Update trail management to trail system management
+- **Trail Systems UI**: Complete trail system management pages (CRUD, status updates, history timeline)
 - **Care Reports UI**: Create complete care report management interface (list, detail, create, edit, assign, comment)
-- **Tag Management UI**: Create tag CRUD interfaces (status tags and care report type tags)
-- **Authentication UI**: Add passkey and magic link login options (currently only email/password)
-- **Dashboard Updates**: Update dashboards for all 8 roles with trail systems and care reports
-- **Offline Indicator**: Add UI indicators when using cached data
+- **Tag Management UI**: Create tag CRUD interfaces (condition tags and care report type tags)
+- **Dashboard Updates**: Implement dashboards for all 8 roles with trail systems and care reports
+- **Analytics**: Implement analytics dashboards with Tremor charts
+- **Bulk Operations**: Implement bulk status update and bulk report management interfaces
 
 **Estimated Work**: 15-25 days (AI-assisted)
 
@@ -384,7 +428,7 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 **Current State:**
 - VPC, subnets, security groups configured
 - AWS Cognito User Pool with 8 groups
-- DynamoDB tables (14 tables currently, needs 21 for MVP)
+- DynamoDB tables (7 tables currently in multi-table design per ADR-001; single-table design with 16 entity types is scale target)
 - Lambda functions for API deployment
 - API Gateway with custom domain
 - S3 buckets for photos and deployments
@@ -395,7 +439,7 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 **Needs Updates For MVP:**
 
 - **Security Hardening**: Enable CloudTrail (1-year retention), deploy AWS WAF (Security Hub and GuardDuty moved to post-MVP)
-- **New DynamoDB Tables**: Add 7 tables (trail_systems, trail_system_history, status_tags, scheduled_status_changes, trail_care_reports, trail_care_report_comments, care_report_type_tags)
+- **DynamoDB Entity Types**: Current 7-table design supports MVP entities. Single-table migration (16 entity types with ORG#, USER#, TRAILSYSTEM#, REPORT#, DEVICE#, PASSKEY# prefixes, 5 overloaded GSIs) deferred per ADR-001 until DynamoDB costs exceed $100/month or traffic reaches 10K DAU
 - **Secrets Rotation**: Configure 180-day automatic rotation
 - **Cognito Updates**: Configure MFA enforcement, passkey support (if available)
 - **Lambda Cron Job**: Add scheduled status changes processor
@@ -403,27 +447,41 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 
 **Estimated Work**: 10-15 days (AI-assisted)
 
-### iPhone Apps (iOS)
+### Android Apps (ACTIVE — FIRST PRIORITY)
 
 **Current State:**
-- **Do not exist** - must be created from scratch
+- **Android User App** (com.traillens.app): In active development with Figma mockups
+  - 36 screens defined in `androiduser/docs/MOBILEAPP_SCREENS.md`
+  - Kotlin 2.0+, Jetpack Compose, Material Design 3, Hilt DI
+  - Sections: Onboarding/Auth (9), Main Tab Bar (4), Trail Discovery (7), Care Reports (5), Notifications (2), Profile/Settings (5), Offline/Error (4), TrailPulse (2)
+- **Android Admin App** (com.traillens.admin): In active development with Figma mockups
+  - 42 screens defined in `androidadmin/docs/MOBILEAPP_SCREENS.md`
+  - Same tech stack as User app, admin role validation gate
+  - Sections: Onboarding/Auth (7), Main Tab Bar (5), Conditions Mgmt (6), TrailPulse (3), Care Reports Admin (6), Users/Team (5), Settings Admin (8), Notifications (2), Offline/Error (3)
 
 **Required For MVP:**
-- **User App**: Swift app with trail system viewing, status alerts, care report submission, offline support
-- **Admin App**: Same codebase, separate app target with admin features
-- **TestFlight**: Distribution channel for pilot organizations
-- **Cognito Integration**: All three authentication methods
-- **Push Notifications**: APNS via SNS
-- **Offline Mode**: 7-day status caching, offline report creation with auto-upload
+- **Auth**: All five authentication methods (Passwordless, Magic Link, Passkey via Android Credential Manager, Social Login, Admin Login)
+- **Push Notifications**: FCM via AWS SNS
+- **Offline Mode**: Room database for offline caching and offline report queue (7-day TTL)
+- **Distribution**: Google Play internal testing track
+- **Performance**: Cold start <1.5s, 60fps scrolling, <15MB APK
 
-**Estimated Work**: 25-40 days (AI-assisted, longest single phase)
+**Estimated Work**: 30-45 days (AI-assisted, longest single phase)
 
-### Android Apps
+### iOS Apps (PARALLEL TRACK)
 
 **Current State:**
-- **Do not exist** and are **OUT OF SCOPE for MVP**
+- **Do not exist** - will be created after Android apps reach beta
 
-**Post-MVP**: Android version will follow after iOS MVP launch
+**Required For MVP:**
+- **User App**: Swift/SwiftUI with same feature set as Android User App
+- **Admin App**: Swift/SwiftUI with same feature set as Android Admin App
+- **TestFlight**: Distribution channel for pilot organizations
+- **Cognito Integration**: All authentication methods via AWS Amplify for Swift
+- **Push Notifications**: APNS via SNS
+- **Offline Mode**: Core Data for offline caching and offline report queue (7-day TTL)
+
+**Estimated Work**: 20-30 days (AI-assisted, leveraging Android patterns and shared API)
 
 ---
 
@@ -444,8 +502,8 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 **Objective**: Change homepage hero section byline from "Connecting users to trail maintainers" to "Building communities, one trail at a time"
 
 **Files to Modify**:
-- `web/src/pages/Landing.jsx` (line ~143 or hero section)
-- `web/src/pages/Home.jsx` (if exists)
+- `webui/src/features/public/pages/Landing.tsx` (line ~143 or hero section)
+- `webui/src/features/public/pages/Home.tsx` (if exists)
 
 **Implementation Steps**:
 1. Read Landing.jsx or Home.jsx to locate current byline
@@ -503,8 +561,8 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 **Objective**: Update website metadata with new brand messaging
 
 **Files to Modify**:
-- `web/public/index.html` (meta description tag)
-- `web/src/components/SEO.jsx` (if exists)
+- `webui/index.html` (meta description tag)
+- `webui/src/features/public/components/SEO.tsx` (if exists)
 - Any OpenGraph/Twitter card metadata
 
 **Implementation Steps**:
@@ -557,8 +615,8 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 **Background**: The website currently references app store buttons in the landing page but does not use official branded badges from Apple and Google. Each provider has strict branding requirements that must be followed to comply with their terms of service and pass app review.
 
 **Files to Modify**:
-- `web/src/pages/Landing.jsx` (or wherever app download CTAs are shown)
-- `web/public/index.html` (if app badges are in static HTML)
+- `webui/src/features/public/pages/Landing.tsx` (or wherever app download CTAs are shown)
+- `webui/index.html` (if app badges are in static HTML)
 
 **Assets to Download and Add**:
 
@@ -566,7 +624,7 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 - Download from: [Apple App Store Marketing Tools](https://tools.applemediaservices.com/app-store/)
 - Badge Type: "Download on the App Store" (black badge preferred)
 - Formats: SVG (primary), PNG (fallback)
-- Save to: `web/src/assets/badges/Download_on_App_Store_Badge_US-UK_RGB_blk_092917.svg`
+- Save to: `webui/src/assets/badges/Download_on_App_Store_Badge_US-UK_RGB_blk_092917.svg`
 - Minimum height: 40px (screen), 10mm (print)
 - Clear space: 1/4 badge height on all sides
 
@@ -574,13 +632,13 @@ The TrailLensHQ codebase consists of an **exploratory prototype** across three m
 - Download from: [Google Play Badges Tool](https://play.google.com/intl/en_us/badges/)
 - Badge Type: "Get it on Google Play" (standard badge)
 - Formats: SVG (primary), PNG (fallback)
-- Save to: `web/src/assets/badges/google-play-badge.svg`
+- Save to: `webui/src/assets/badges/google-play-badge.svg`
 - Size: Same height or larger than Apple badge when displayed together
 - Clear space: 1/4 badge height on all sides
 
 **Implementation Steps**:
 1. Download official badge assets from Apple and Google (see Section 8.9 Download Checklist)
-2. Create `web/src/assets/badges/` directory if it doesn't exist
+2. Create `webui/src/assets/badges/` directory if it doesn't exist
 3. Save SVG and PNG versions for both badges
 4. Update landing page component to use official badges with proper markup:
    - Use semantic `<a>` links with `target="_blank"` and `rel="noopener noreferrer"`
@@ -647,7 +705,7 @@ const ANDROID_APP_AVAILABLE = false; // Set to true when Android app launches
 - Performance: Verify lazy loading works, no layout shift
 
 **Acceptance Criteria**:
-- Official badge assets downloaded and stored in `web/src/assets/badges/`
+- Official badge assets downloaded and stored in `webui/src/assets/badges/`
 - Landing page displays Apple App Store badge with proper branding
 - Google Play badge conditionally rendered (hidden for MVP, shown post-MVP)
 - Both badges are identical height (56px / h-14)
@@ -674,7 +732,7 @@ const ANDROID_APP_AVAILABLE = false; // Set to true when Android app launches
 
 **Reference Documentation**: `docs/WEBSITE_CONTENT_UPDATES_MVP.md` - Section 8.10 "Login Page Social Sign-In Buttons"
 
-**Background**: The current login page (`web/src/views/auth/Login.js`, lines 116-144) uses generic FontAwesome icons for social sign-in buttons. This does NOT comply with official branding guidelines from Google, Facebook, and Apple, and may cause app review failures or violate terms of service.
+**Background**: The current login page (`webui/src/features/auth/pages/Login.tsx`, lines 116-144) uses generic FontAwesome icons for social sign-in buttons. This does NOT comply with official branding guidelines from Google, Facebook, and Apple, and may cause app review failures or violate terms of service.
 
 **Current Implementation Issues**:
 1. Uses `<i className="fab fa-google">` instead of official Google "G" logo
@@ -685,16 +743,16 @@ const ANDROID_APP_AVAILABLE = false; // Set to true when Android app launches
 6. Does not use required typography (Roboto for Google, San Francisco for Apple)
 
 **Files to Modify**:
-- `web/src/views/auth/Login.js` (lines 115-145 - replace social button section)
-- `web/src/views/auth/Register.js` (if social buttons exist there - same updates)
-- `web/public/index.html` or `web/src/index.css` (add Roboto font import)
+- `webui/src/features/auth/pages/Login.tsx` (lines 115-145 - replace social button section)
+- `webui/src/features/auth/pages/Register.tsx` (if social buttons exist there - same updates)
+- `webui/index.html` or `webui/src/index.css` (add Roboto font import)
 
 **Assets to Download and Add**:
 
 **Google Sign-In Assets**:
 - Download from: [Google Identity Branding Guidelines](https://developers.google.com/identity/branding-guidelines)
 - Asset: `signin-assets.zip` containing official Google "G" logo
-- Save to: `web/src/assets/auth/google-g-logo.svg`
+- Save to: `webui/src/assets/auth/google-g-logo.svg`
 - Required text: "Sign in with Google" (NOT just "Google")
 - Font: Roboto Medium, 14px
 - Colors: Light theme - white fill, gray stroke; Dark theme - dark fill
@@ -702,7 +760,7 @@ const ANDROID_APP_AVAILABLE = false; // Set to true when Android app launches
 **Facebook Login Assets**:
 - Download from: [Facebook Brand Resource Center](https://en.facebookbrand.com/facebookapp/)
 - Asset: Facebook logo pack with white 'f' logo
-- Save to: `web/src/assets/auth/facebook-f-logo-white.svg`
+- Save to: `webui/src/assets/auth/facebook-f-logo-white.svg`
 - Required text: "Continue with Facebook" or "Login with Facebook"
 - Background color: #1877F2 (Facebook Blue)
 - Text color: White (#FFFFFF)
@@ -710,27 +768,27 @@ const ANDROID_APP_AVAILABLE = false; // Set to true when Android app launches
 **Apple Sign In Assets**:
 - Download from: [Apple HIG Sign in with Apple](https://developer.apple.com/design/human-interface-guidelines/sign-in-with-apple)
 - Asset: Official Apple logo in SVG format
-- Save to: `web/src/assets/auth/apple-logo-white.svg` and `apple-logo-black.svg`
+- Save to: `webui/src/assets/auth/apple-logo-white.svg` and `apple-logo-black.svg`
 - Required text: "Sign in with Apple" (NOT just "Apple")
 - Styles: Black background with white logo, OR white background with black logo
 - Font: San Francisco (system font fallback: `-apple-system, BlinkMacSystemFont`)
 
 **Font Requirements**:
-Add Roboto font for Google Sign-In button. Add to `web/public/index.html`:
+Add Roboto font for Google Sign-In button. Add to `webui/index.html`:
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500&display=swap" rel="stylesheet">
 ```
 
-Or add to `web/src/index.css`:
+Or add to `webui/src/index.css`:
 ```css
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@500&display=swap');
 ```
 
 **Implementation Steps**:
 1. Download all official logo assets (see Section 8.10 Asset Download Checklist)
-2. Create `web/src/assets/auth/` directory if it doesn't exist
+2. Create `webui/src/assets/auth/` directory if it doesn't exist
 3. Save all logo SVG files to assets directory
 4. Add Roboto font import to HTML head or CSS
 5. **REPLACE lines 115-145 in Login.js** with new implementation (see code below)
@@ -853,7 +911,7 @@ const isAppleDevice = () => {
 - Mobile devices: Test on actual iOS and Android devices
 
 **Acceptance Criteria**:
-- Official logo assets downloaded and stored in `web/src/assets/auth/`
+- Official logo assets downloaded and stored in `webui/src/assets/auth/`
 - Roboto font added to project (via HTML link or CSS import)
 - Login.js lines 115-145 replaced with new implementation
 - isAppleDevice() function removed (lines 98-101)
@@ -1335,7 +1393,7 @@ REACT_APP_COGNITO_DOMAIN=auth.dev.traillenshq.com
 **Files to Modify**:
 - `infra/components/cognito.py` (Cognito MFA configuration)
 - `api-dynamo/middleware/auth.py` (MFA enforcement logic - skip MFA check for passkey-authenticated users)
-- `web/src/pages/Login.jsx` (MFA setup UI)
+- `webui/src/features/auth/pages/Login.tsx` (MFA setup UI)
 
 **Implementation Steps**:
 1. Configure Cognito User Pool MFA settings:
@@ -1404,13 +1462,18 @@ REACT_APP_COGNITO_DOMAIN=auth.dev.traillenshq.com
 
 ---
 
-### Task 3.1: Configure Cognito for Native Passkey Support
+### Task 3.1: Configure Cognito for Native Passkey Support ✅ COMPLETE
+
+**Status: IMPLEMENTED** — Cognito Essentials tier with Native WebAuthn configured and deployed.
 
 **Objective**: Enable AWS Cognito's native passkey (WebAuthn/FIDO2) authentication support launched November 2024
 
-**Research Completed**: AWS Cognito has native passkey support as of November 22, 2024. No custom Lambda authentication flow needed.
-
-**Implementation Approach**: Use Cognito's native `WEB_AUTHN` authentication flow with `USER_AUTH` flow type.
+**Implementation Summary**:
+- Cognito user pool upgraded to `ESSENTIALS` tier
+- `web_authn_configuration`: `relying_party_id=traillenshq.com`, `user_verification=preferred`
+- `sign_in_policy`: `allowed_first_auth_factors=["PASSWORD", "WEB_AUTHN"]`
+- `mfa_configuration` changed from `ON` to `OPTIONAL` (WebAuthn is inherently MFA; admin MFA enforced at FastAPI middleware)
+- `FactorConfiguration=MULTI_FACTOR_WITH_USER_VERIFICATION` set via `infra/scripts/set-cognito-mfa-config.py` boto3 script on every `pulumi up`
 
 **Key References**:
 
@@ -1506,146 +1569,43 @@ pulumi up --stack dev
 
 ---
 
-### Task 3.2: Implement Passkey Authentication (WebAuthn/FIDO2)
+### Task 3.2: Implement Passkey Authentication (WebAuthn/FIDO2) ✅ ARCHITECTURE COMPLETE
 
-**Objective**: Enable biometric login using Touch ID, Face ID, or hardware security keys using Cognito's native passkey APIs
+**Status: BACKEND ARCHITECTURE COMPLETE** — Custom passkey backend removed; Cognito Native WebAuthn configured. Frontend client implementation deferred to separate PRs.
 
-**Research Completed**: AWS Cognito has native passkey APIs (StartWebAuthnRegistration, CompleteWebAuthnRegistration, InitiateAuth with WEB_AUTHN challenge) that handle credential storage, verification, and security. No custom DynamoDB tables or crypto verification code needed.
+**Objective**: Enable biometric login using Touch ID, Face ID, or hardware security keys via Cognito Native WebAuthn.
 
-**Key References**:
+**Architecture Decision (FINAL)**: All WebAuthn operations are **client-side only** via the Cognito SDK. There are **NO backend passkey proxy endpoints**. The 6 custom backend passkey endpoints previously planned (`/auth/passkey/register/start`, `/auth/passkey/register/complete`, `/auth/passkey/list`, `/auth/passkey/delete`, `/auth/login?auth_type=passkey`, `/auth/passkey/verify`) were implemented as a custom HS256 solution and have been **removed entirely** from the codebase. Cognito Native WebAuthn makes them unnecessary.
 
-- [StartWebAuthnRegistration API Documentation](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_StartWebAuthnRegistration.html)
-- [CompleteWebAuthnRegistration API Documentation](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CompleteWebAuthnRegistration.html)
-- [Authentication Flows - Passkey Section](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-authentication-flow-methods.html)
-- [AWS Passwordless Auth Sample Code](https://github.com/aws-samples/amazon-cognito-passwordless-auth)
+**Implemented (Backend/Infra)**:
 
-**Files to Modify**:
+- Cognito ESSENTIALS tier with `web_authn_configuration` and `sign_in_policy` (Task 3.1)
+- Custom passkey/HS256 backend deleted: ~2,400 lines removed
+- JWT verification is RS256-only via Cognito JWKS (no HS256 fallback)
+- API Gateway simplified to `{proxy+}` catch-all (auth at FastAPI level only)
 
-- `api-dynamo/routes/auth.py` (add passkey registration/auth endpoints that call Cognito APIs)
-- `web/src/pages/Login.jsx` (add "Sign in with Passkey" button)
-- `web/src/pages/Settings.jsx` (add passkey management UI)
-- `web/src/components/PasskeySetup.jsx` (new component for passkey registration)
+**Pending (Frontend — separate PRs)**:
 
-**Implementation Steps**:
+**Registration flow (client-side Cognito SDK)**:
+1. Call Cognito SDK `StartWebAuthnRegistration(AccessToken=access_token)`
+2. Pass `CredentialCreationOptions` to `navigator.credentials.create()`
+3. Call `CompleteWebAuthnRegistration(AccessToken=access_token, Credential=credential_data)`
 
-**Backend (API) - Proxy to Cognito APIs**:
+**Authentication flow (client-side Cognito SDK)**:
+1. Call `InitiateAuth` with `AuthFlow="USER_AUTH"`, `PREFERRED_CHALLENGE="WEB_AUTHN"`
+2. Receive `WEB_AUTHN` challenge; call `navigator.credentials.get()`
+3. Call `RespondToAuthChallenge` with assertion response
+4. Receive RS256 IdToken/AccessToken/RefreshToken
 
-1. Implement `/auth/passkey/register/start` endpoint:
-   - Requires authenticated user (access token in Authorization header)
-   - Call `cognito_client.start_web_authn_registration(AccessToken=access_token)`
-   - Return `CredentialCreationOptions` from Cognito response
-   - Example response includes: challenge, RP ID, user info, supported algorithms (ES256, RS256)
+**Credential management (client-side Cognito SDK)**:
+- `ListWebAuthnCredentials(AccessToken=...)` — list registered passkeys
+- `DeleteWebAuthnCredential(AccessToken=..., CredentialId=...)` — remove passkey
 
-2. Implement `/auth/passkey/register/complete` endpoint:
-   - Receives `CredentialCreationOptions` from frontend
-   - Call `cognito_client.complete_web_authn_registration(AccessToken=access_token, Credential=credential_data)`
-   - Return success/error status
-   - Cognito handles credential storage automatically (max 20 per user)
-
-3. Implement `/auth/passkey/list` endpoint:
-   - Call `cognito_client.list_web_authn_credentials(AccessToken=access_token)`
-   - Return list of registered passkeys with metadata (friendly name, creation date, last used)
-
-4. Implement `/auth/passkey/delete` endpoint:
-   - Call `cognito_client.delete_web_authn_credential(AccessToken=access_token, CredentialId=credential_id)`
-   - Return success/error status
-
-**Backend (API) - Passkey Sign-In Flow**:
-
-1. Update existing `/auth/login` endpoint to support passkey option:
-   - If `auth_type=passkey`, call `cognito_client.initiate_auth()` with:
-     - `AuthFlow="USER_AUTH"`
-     - `AuthParameters={"USERNAME": username, "PREFERRED_CHALLENGE": "WEB_AUTHN"}`
-   - Receive `WEB_AUTHN` challenge from Cognito
-   - Return challenge to frontend
-
-2. Implement `/auth/passkey/verify` endpoint:
-   - Receives assertion response from `navigator.credentials.get()`
-   - Call `cognito_client.respond_to_auth_challenge()` with:
-     - `ChallengeName="WEB_AUTHN"`
-     - `ChallengeResponses={"USERNAME": username, "CREDENTIAL": credential_json}`
-     - `Session` from previous challenge
-   - Return JWT tokens (IdToken, AccessToken, RefreshToken) on success
-
-**Frontend (Web) - Passkey Registration**:
-
-1. Add "Set up Passkey" button in user settings (after user is logged in)
-2. On button click:
-   - Call backend `/auth/passkey/register/start` with user's access token
-   - Receive `CredentialCreationOptions` from backend
-   - Call `navigator.credentials.create()` with options:
-
-     ```javascript
-     const credential = await navigator.credentials.create({
-       publicKey: credentialCreationOptions
-     });
-     ```
-
-   - Send credential response to `/auth/passkey/register/complete`
-   - Show success message: "Passkey registered successfully"
-
-3. Display list of registered passkeys (call `/auth/passkey/list`):
-   - Show friendly name (e.g., "MacBook Pro Touch ID")
-   - Show creation date and last used date
-   - Add "Delete" button for each passkey
-
-**Frontend (Web) - Passkey Sign-In**:
-
-1. Add "Sign in with Passkey" button to login page
-2. On button click:
-   - Prompt user to enter username OR implement autofill (conditional UI)
-   - Call backend `/auth/login?auth_type=passkey&username={username}`
-   - Receive WebAuthn challenge from backend
-   - Call `navigator.credentials.get()` with challenge:
-
-     ```javascript
-     const assertion = await navigator.credentials.get({
-       publicKey: challengeOptions
-     });
-     ```
-
-   - Send assertion response to `/auth/passkey/verify`
-   - Store returned JWT tokens in localStorage
-   - Redirect to dashboard
-
-3. Error handling:
-   - User cancels: Show "Passkey sign-in cancelled" message
-   - Passkey not supported: Hide passkey button, show fallback options
-   - Invalid credential: Show "Passkey not recognized" error
-   - Network error: Show retry option
-
-**Browser Support Detection**:
-
-```javascript
-function isPasskeySupported() {
-  return window.PublicKeyCredential !== undefined &&
-         navigator.credentials !== undefined;
-}
-```
-
-**Testing**:
-
-- Register passkey with Touch ID on macOS Chrome/Safari
-- Sign in with registered passkey (verify biometric prompt appears)
-- Test passkey listing (verify metadata displayed correctly)
-- Test passkey deletion and re-registration
-- Test with hardware security key (YubiKey) if available
-- Test error handling (user cancels, passkey not supported in old browsers)
-- Verify maximum 20 passkeys per user enforced by Cognito
-- Test cross-device passkey sync (iCloud Keychain, Google Password Manager)
-
-**Acceptance Criteria**:
-
-- Passkey registration working via Cognito's native APIs
-- Passkey sign-in functional with biometrics (Touch ID, Face ID)
-- Passkeys stored securely in Cognito (not custom DynamoDB table)
-- Cognito handles replay attack prevention automatically
-- List/delete passkey functionality working
-- Error handling graceful with clear user messages
-- Documentation updated with browser support matrix (Chrome 109+, Safari 16+, Edge 109+)
-- No custom cryptography code (all handled by Cognito)
-
-**AI-Assisted Timeline**: 10-14 hours (reduced from 12-16 since no custom crypto logic needed)
+**Frontend files to create** (webui, androiduser — deferred):
+- `webui/src/features/auth/components/PasskeySetup.tsx` (registration)
+- `webui/src/features/auth/pages/Login.tsx` (add "Sign in with Passkey" button)
+- `webui/src/features/user/pages/Settings.tsx` (passkey management)
+- `androiduser/` — Credential Manager API integration with Cognito SDK
 
 ---
 
@@ -1671,8 +1631,8 @@ function isPasskeySupported() {
 **Files to Modify**:
 - `api-dynamo/auth/magic_link.py` (new file for magic link generation)
 - `api-dynamo/routes/auth.py` (magic link endpoints)
-- `web/src/pages/Login.jsx` (magic link login option)
-- `web/src/pages/MagicLinkVerify.jsx` (new page for link verification)
+- `webui/src/features/auth/pages/Login.tsx` (magic link login option)
+- `webui/src/features/auth/pages/MagicLinkVerify.tsx` (new page for link verification)
 
 **Implementation Steps**:
 
@@ -1771,8 +1731,8 @@ Building communities, one trail at a time.
 
 **Files to Modify**:
 - `infra/components/cognito.py` (Cognito password policy)
-- `web/src/pages/Register.jsx` (password validation UI)
-- `web/src/pages/ChangePassword.jsx` (update password change flow)
+- `webui/src/features/auth/pages/Register.tsx` (password validation UI)
+- `webui/src/features/auth/pages/ChangePassword.tsx` (update password change flow)
 
 **Implementation Steps**:
 
@@ -1814,7 +1774,7 @@ Building communities, one trail at a time.
 **Objective**: Design clean login page with all three authentication methods
 
 **Files to Modify**:
-- `web/src/pages/Login.jsx` (update with all three options)
+- `webui/src/features/auth/pages/Login.tsx` (update with all three options)
 
 **UI Design**:
 ```
@@ -1857,9 +1817,9 @@ Building communities, one trail at a time.
 
 ---
 
-### Task 3.6: Implement iPhone App Authentication
+### Task 3.6: Implement Mobile App Authentication
 
-**Objective**: Integrate all three authentication methods into iPhone apps
+**Objective**: Integrate all five authentication methods into mobile apps (Android + iOS)
 
 **Files to Modify**:
 - iOS app `AuthenticationManager.swift` (new file)
@@ -1874,18 +1834,18 @@ Building communities, one trail at a time.
 6. Handle token refresh
 
 **Testing**:
-- Test all three auth methods on iPhone
+- Test all five auth methods on Android and iOS
 - Verify Face ID/Touch ID prompts for passkey
 - Test magic link deep linking
 - Verify secure token storage
 
 **Acceptance Criteria**:
-- All three auth methods work on iPhone
+- All five auth methods work on Android and iOS
 - Biometric prompts functional
 - Tokens stored securely
 - Session persistence working
 
-**AI-Assisted Timeline**: 12 hours (included in Phase 12 iPhone Apps development)
+**AI-Assisted Timeline**: 12 hours (included in Phase 12 Mobile Apps development)
 
 ---
 
@@ -1920,7 +1880,7 @@ Building communities, one trail at a time.
 - Magic link email delivery working
 - Enhanced password requirements enforced
 - Unified login experience implemented
-- iPhone apps support all three methods
+- Mobile apps support all five methods
 - User documentation complete
 
 ---
@@ -1991,7 +1951,7 @@ Building communities, one trail at a time.
 
 **Files to Modify**:
 - `api-dynamo/routes/user.py` (add `/user/export-data` endpoint)
-- `web/src/pages/Settings.jsx` (add "Download My Data" button)
+- `webui/src/features/user/pages/Settings.tsx` (add "Download My Data" button)
 - `api-dynamo/services/data_export.py` (new file for export logic)
 
 **Implementation Steps**:
@@ -2051,7 +2011,7 @@ Building communities, one trail at a time.
 
 **Files to Modify**:
 - `api-dynamo/routes/user.py` (add `/user/delete-account` endpoint)
-- `web/src/pages/Settings.jsx` (add "Delete Account" section)
+- `webui/src/features/user/pages/Settings.tsx` (add "Delete Account" section)
 - `api-dynamo/services/account_deletion.py` (new file)
 
 **Implementation Steps**:
@@ -2159,6 +2119,8 @@ Email sent: "Your account has been permanently deleted"
 **Dependencies**: Phase 3 complete (authentication working)
 
 **DATA MODEL CHANGE**: This is a CRITICAL architectural change. The platform currently manages individual trails, but MVP requires managing trail systems (collections of trails). Example: Hydrocut organization has one trail system that includes Glasgow and Synders areas. Each trail system can contain multiple physical trails, but status is managed at the system level, not per-trail.
+
+**DATABASE DESIGN**: Per `api-dynamo/docs/DYNAMO_DATABASE_DESIGN.md`, TrailLens uses a **single-table DynamoDB design** pattern (table name: `traillens-prod`) with entity type prefixes (ORG#, USER#, TRAILSYSTEM#, REPORT#, etc.), 5 overloaded GSIs (GSI1-GSI5), and 16 MVP entity types. **Current production** uses a 7-table multi-table design per ADR-001, optimized for cost at <500 DAU. Single-table migration is deferred until DynamoDB costs exceed $100/month or traffic reaches 10K DAU. See `api-dynamo/docs/ACCESS_PATTERNS.md` for 78 documented access patterns.
 
 ---
 
@@ -2320,11 +2282,11 @@ trail_system_history = Table(
 **Objective**: Update frontend to manage trail systems instead of individual trails
 
 **Files to Modify**:
-- `web/src/pages/TrailSystems.jsx` (rename from Trails.jsx)
-- `web/src/pages/TrailSystemDetail.jsx`
-- `web/src/pages/TrailSystemEdit.jsx`
-- `web/src/components/TrailSystemCard.jsx`
-- `web/src/components/StatusUpdateModal.jsx`
+- `webui/src/features/trails/pages/TrailSystems.tsx` (rename from Trails.tsx)
+- `webui/src/features/trails/pages/TrailSystemDetail.tsx`
+- `webui/src/features/trails/pages/TrailSystemEdit.tsx`
+- `webui/src/features/trails/components/TrailSystemCard.tsx`
+- `webui/src/features/trails/components/StatusUpdateModal.tsx`
 
 **UI Components to Update**:
 1. Trail Systems List Page (org-admin view)
@@ -2510,7 +2472,7 @@ status_tags = Table(
 
 **Files to Modify**:
 - `api-dynamo/services/trail_system_service.py` (update status logic)
-- `web/src/components/StatusUpdateModal.jsx` (add tag selector)
+- `webui/src/features/trails/components/StatusUpdateModal.tsx` (add tag selector)
 
 **Implementation Steps**:
 1. Update status update endpoint to accept tags array
@@ -2540,7 +2502,7 @@ status_tags = Table(
 **Objective**: Remember last-used tags for quick status updates
 
 **Files to Modify**:
-- `web/src/components/StatusUpdateModal.jsx` (add sticky filter)
+- `webui/src/features/trails/components/StatusUpdateModal.tsx` (add sticky filter)
 
 **Implementation Steps**:
 1. Store last-used tags in localStorage per user
@@ -2561,8 +2523,8 @@ status_tags = Table(
 **Objective**: Create tag management page for org-admins
 
 **Files to Modify**:
-- `web/src/pages/OrganizationSettings.jsx` (add Tags tab)
-- `web/src/components/TagManager.jsx` (new component)
+- `webui/src/features/organization/pages/OrganizationSettings.tsx` (add Tags tab)
+- `webui/src/features/organization/components/TagManager.tsx` (new component)
 
 **UI Features**:
 - List all tags with color chips
@@ -2613,21 +2575,26 @@ status_tags = Table(
 - `infra/components/dynamodb.py` (add status_types table or reuse configuration)
 - `api-dynamo/routes/status_types.py`
 
-**Predefined Status Types**:
-- Open
-- Closed
-- Closed for Maintenance
-- Closed for Season
-- Caution (Wet Conditions)
-- Caution (Dry Conditions)
-- Caution (Wildlife)
+**Predefined Condition Types** (seed data only — admins can rename, delete, or replace):
+
+| Name | Color | Hex |
+|------|-------|-----|
+| OPEN | Green | #4CAF50 |
+| GREAT CONDITIONS | Green | #4CAF50 |
+| CAUTION (WET CONDITIONS) | Yellow | #FFC107 |
+| CAUTION (ICY) | Yellow | #FFC107 |
+| POOR CONDITIONS - DON'T RIDE | Red | #F44336 |
+| MUDDY - DON'T RIDE | Red | #F44336 |
+| CLOSED FOR EVENT | Red | #F44336 |
+
+**NOTE**: "Closed" is NOT a condition. Conditions describe trail state for riders. These 7 are seed data only — trail system admins can customize freely.
 
 **Implementation Steps**:
-1. Create status types configuration (may be in organization settings, not separate table)
-2. Allow org-admin to create custom statuses (max 30)
-3. Each status has: name, default_reason, default_tags
-4. Implement API endpoints for status type CRUD
-5. Create UI for managing status types
+1. Create condition types configuration (may be in organization settings, not separate table)
+2. Allow org-admin to create custom condition types (max 30)
+3. Each condition type has: name, color (hex, admin-chosen), default_reason, default_tags
+4. Implement API endpoints for condition type CRUD
+5. Create UI for managing condition types
 
 **Acceptance Criteria**:
 - Custom status types supported
@@ -2644,7 +2611,7 @@ status_tags = Table(
 
 **Files to Modify**:
 - `api-dynamo/routes/trail_systems.py` (status update endpoint)
-- `web/src/components/StatusUpdateModal.jsx` (complete modal)
+- `webui/src/features/trails/components/StatusUpdateModal.tsx` (complete modal)
 
 **Workflow**:
 1. User selects trail system(s)
@@ -2730,7 +2697,7 @@ traillens-{env}-photos/
 
 **Files to Modify**:
 - `api-dynamo/models/trail_system.py` (add seasons field)
-- `web/src/components/TrailSystemEdit.jsx` (add season selector)
+- `webui/src/features/trails/components/TrailSystemEdit.tsx` (add season selector)
 
 **Seasons**:
 - Spring, Summer, Fall, Winter
@@ -2756,7 +2723,7 @@ traillens-{env}-photos/
 **Objective**: Complete history tracking (already created in Phase 5)
 
 **Files to Modify**:
-- `web/src/components/HistoryTimeline.jsx` (display component)
+- `webui/src/features/trails/components/HistoryTimeline.tsx` (display component)
 
 **Implementation Steps**:
 1. Create history timeline component
@@ -2780,7 +2747,7 @@ traillens-{env}-photos/
 
 **Files to Modify**:
 - `api-dynamo/routes/trail_systems.py` (bulk update endpoint)
-- `web/src/components/BulkStatusUpdate.jsx` (new component)
+- `webui/src/features/trails/components/BulkStatusUpdate.tsx` (new component)
 
 **Bulk Update Flow**:
 1. Select multiple trail systems (checkboxes)
@@ -3009,8 +2976,8 @@ scheduled_status_changes = Table(
 **Objective**: Allow scheduling from status update modal
 
 **Files to Modify**:
-- `web/src/components/StatusUpdateModal.jsx` (add schedule option)
-- `web/src/pages/ScheduledChanges.jsx` (new page to view/manage schedules)
+- `webui/src/features/trails/components/StatusUpdateModal.tsx` (add schedule option)
+- `webui/src/features/trails/pages/ScheduledChanges.tsx` (new page to view/manage schedules)
 
 **UI Features**:
 - "Schedule for Later" checkbox in status update modal
@@ -3276,7 +3243,7 @@ care_report_type_tags = Table(
 
 **Files to Modify**:
 - `api-dynamo/routes/care_report_type_tags.py` (new file)
-- `web/src/pages/OrganizationSettings.jsx` (add Type Tags tab)
+- `webui/src/features/organization/pages/OrganizationSettings.tsx` (add Type Tags tab)
 
 **Implementation Steps**:
 1. Implement CRUD API for type tags
@@ -3411,9 +3378,9 @@ care_report_type_tags = Table(
 
 ### Task 9.12: Implement Offline Report Creation Support
 
-**Objective**: Allow iPhone apps to create reports offline, queue locally, auto-upload when signal returns
+**Objective**: Allow mobile apps to create reports offline, queue locally, auto-upload when signal returns
 
-**Implementation Steps** (mostly in Phase 12 iPhone Apps):
+**Implementation Steps** (mostly in Phase 12 Mobile Apps):
 1. API supports batch upload of offline reports
 2. Add `created_offline` and `synced_at` fields
 3. Validate reports submitted from offline queue
@@ -3434,11 +3401,11 @@ care_report_type_tags = Table(
 **Objective**: Complete care report UI for web
 
 **Files to Modify**:
-- `web/src/pages/CareReports.jsx` (list view)
-- `web/src/pages/CareReportDetail.jsx` (detail view)
-- `web/src/pages/CareReportCreate.jsx` (create form)
-- `web/src/components/CareReportCard.jsx`
-- `web/src/components/CareReportFilters.jsx`
+- `webui/src/features/trails/pages/CareReports.tsx` (list view)
+- `webui/src/features/trails/pages/CareReportDetail.tsx` (detail view)
+- `webui/src/features/trails/pages/CareReportCreate.tsx` (create form)
+- `webui/src/features/trails/components/CareReportCard.tsx`
+- `webui/src/features/trails/components/CareReportFilters.tsx`
 
 **UI Features**:
 - List view with filters (status, priority, assignment, type tags)
@@ -3597,16 +3564,16 @@ Reply STOP to unsubscribe.
 
 ---
 
-### Task 10.3: Implement Push Notifications via SNS→APNS for iPhone
+### Task 10.3: Implement Push Notifications via SNS→FCM (Android) and SNS→APNS (iOS)
 
-**Objective**: Send push notifications to iPhone app users
+**Objective**: Send push notifications to Android app users (FCM) and iOS app users (APNS)
 
 **Files to Modify**:
 - `api-dynamo/services/notification_service.py` (add push logic)
 - `infra/components/sns.py` (APNS configuration)
 
 **Implementation Steps**:
-1. Configure SNS with APNS credentials (Apple Push Notification certificate)
+1. Configure SNS with FCM credentials (Firebase Server Key) and APNS credentials (Apple Push Notification certificate)
 2. Store device tokens in `devices` table when user logs in
 3. Implement send_push function using SNS
 4. Create push notification payload:
@@ -3630,7 +3597,7 @@ Reply STOP to unsubscribe.
 
 **Testing**:
 - Update trail system status
-- Verify push notification received on iPhone
+- Verify push notification received on Android (FCM) and iOS (APNS)
 - Tap notification (verify deep link works)
 - Test with invalid device token (should remove)
 
@@ -3651,7 +3618,7 @@ Reply STOP to unsubscribe.
 **Files to Modify**:
 - `api-dynamo/routes/subscriptions.py` (new file)
 - DynamoDB table: `subscriptions` (new table)
-- `web/src/pages/Subscriptions.jsx` (manage subscriptions UI)
+- `webui/src/features/user/pages/Subscriptions.tsx` (manage subscriptions UI)
 
 **Subscription Types**:
 1. **Trail System Subscription**: Subscribe to specific trail system
@@ -3711,7 +3678,7 @@ subscriptions = Table(
 
 **Files to Modify**:
 - `api-dynamo/models/user.py` (add notification_preferences)
-- `web/src/pages/NotificationSettings.jsx` (new page)
+- `webui/src/features/user/pages/NotificationSettings.tsx` (new page)
 
 **Preference Options**:
 - **Channels**: Email, SMS, Push (checkboxes for each)
@@ -3823,8 +3790,8 @@ subscriptions = Table(
 **Objective**: Settings page for managing notifications
 
 **Files to Modify**:
-- `web/src/pages/Settings.jsx` (add Notifications tab)
-- `web/src/components/NotificationPreferences.jsx`
+- `webui/src/features/user/pages/Settings.tsx` (add Notifications tab)
+- `webui/src/features/user/components/NotificationPreferences.tsx`
 
 **UI Features**:
 - Toggle switches for email/SMS/push
@@ -3846,7 +3813,7 @@ subscriptions = Table(
 **Phase 10 Success Criteria**:
 - Email notifications functional (99%+ delivery)
 - SMS notifications for urgent updates (opt-in)
-- Push notifications to iPhone apps (<2 min latency)
+- Push notifications to mobile apps (<2 min latency)
 - Subscription management working
 - Notification preferences configurable
 - Email and SMS templates professional
@@ -3861,6 +3828,8 @@ subscriptions = Table(
 **Duration**: 10-14 days
 **Priority**: CRITICAL (core user interface)
 **Dependencies**: Phases 5-9 complete (all backend features ready)
+
+**Tech Stack**: webui/ project — React 19 + TypeScript + Vite 6.x + Tailwind CSS 4.x + shadcn/ui + Tremor (charts) + Lucide React (icons) + Zustand 5.x + React Query 5.x. Feature-based organization with lazy-loaded routes.
 
 **8 User Roles**:
 1. traillenshq-admin (platform super admin)
@@ -3879,10 +3848,10 @@ subscriptions = Table(
 **Objective**: Design and implement dashboard for each role with relevant metrics and quick actions
 
 **Files to Modify**:
-- `web/src/pages/Dashboard.jsx` (main dashboard router)
-- `web/src/pages/dashboards/OrgAdminDashboard.jsx`
-- `web/src/pages/dashboards/TrailCrewDashboard.jsx`
-- `web/src/pages/dashboards/UserDashboard.jsx`
+- `webui/src/features/admin/pages/Dashboard.tsx` (main dashboard router)
+- `webui/src/features/admin/pages/dashboards/OrgAdminDashboard.tsx`
+- `webui/src/features/admin/pages/dashboards/TrailCrewDashboard.tsx`
+- `webui/src/features/admin/pages/dashboards/UserDashboard.tsx`
 - (Similar for other roles)
 
 **Dashboard Components by Role**:
@@ -3935,9 +3904,9 @@ subscriptions = Table(
 **Objective**: Complete interface for managing trail systems
 
 **Files to Modify**:
-- `web/src/pages/TrailSystems.jsx` (list)
-- `web/src/pages/TrailSystemCreate.jsx` (create)
-- `web/src/pages/TrailSystemEdit.jsx` (edit)
+- `webui/src/features/trails/pages/TrailSystems.tsx` (list)
+- `webui/src/features/trails/pages/TrailSystemCreate.tsx` (create)
+- `webui/src/features/trails/pages/TrailSystemEdit.tsx` (edit)
 
 **UI Features**:
 - List view with search and filters
@@ -3960,9 +3929,9 @@ subscriptions = Table(
 **Objective**: Complete care report interface
 
 **Files to Modify**:
-- `web/src/pages/CareReports.jsx`
-- `web/src/pages/CareReportDetail.jsx`
-- `web/src/components/AssignmentModal.jsx`
+- `webui/src/features/trails/pages/CareReports.tsx`
+- `webui/src/features/trails/pages/CareReportDetail.tsx`
+- `webui/src/features/trails/components/AssignmentModal.tsx`
 
 **UI Features**:
 - List view with filters (priority, status, assignment)
@@ -3985,8 +3954,8 @@ subscriptions = Table(
 **Objective**: Show key metrics and trends
 
 **Files to Modify**:
-- `web/src/pages/Analytics.jsx` (new page)
-- `web/src/components/charts/` (chart components)
+- `webui/src/features/admin/pages/Analytics.tsx` (new page)
+- `webui/src/features/admin/components/charts/` (chart components)
 
 **Analytics to Display**:
 
@@ -4015,7 +3984,7 @@ subscriptions = Table(
 - Timeline: Recent activity
 
 **Implementation Steps**:
-1. Choose charting library (Chart.js or Recharts)
+1. Use Tremor charting components (built on Recharts) per webui/ tech stack
 2. Implement analytics API endpoints
 3. Create chart components
 4. Implement date range selector
@@ -4043,8 +4012,8 @@ subscriptions = Table(
 **Objective**: Efficiently manage multiple trail systems
 
 **Files to Modify**:
-- `web/src/components/BulkActions.jsx`
-- `web/src/components/TrailSystemTable.jsx` (add checkboxes)
+- `webui/src/features/trails/components/BulkActions.tsx`
+- `webui/src/features/trails/components/TrailSystemTable.tsx` (add checkboxes)
 
 **Bulk Operations**:
 - Select multiple trail systems (checkboxes)
@@ -4066,9 +4035,9 @@ subscriptions = Table(
 **Objective**: Manage status tags and care report type tags
 
 **Files to Modify**:
-- `web/src/pages/OrganizationSettings.jsx` (Tags section)
-- `web/src/components/TagManager.jsx`
-- `web/src/components/TypeTagManager.jsx`
+- `webui/src/features/organization/pages/OrganizationSettings.tsx` (Tags section)
+- `webui/src/features/organization/components/TagManager.tsx`
+- `webui/src/features/organization/components/TypeTagManager.tsx`
 
 **UI Features**:
 - Create/edit/delete tags
@@ -4090,9 +4059,9 @@ subscriptions = Table(
 **Objective**: Manage team members and roles
 
 **Files to Modify**:
-- `web/src/pages/TeamManagement.jsx` (new page)
-- `web/src/components/UserRoleEditor.jsx`
-- `web/src/components/InviteUserModal.jsx`
+- `webui/src/features/admin/pages/TeamManagement.tsx` (new page)
+- `webui/src/features/admin/components/UserRoleEditor.tsx`
+- `webui/src/features/admin/components/InviteUserModal.tsx`
 
 **UI Features**:
 - List all team members
@@ -4138,108 +4107,93 @@ subscriptions = Table(
 
 ---
 
-## Phase 12: iPhone Apps
+## Phase 12: Mobile Apps (Android + iOS)
 
-**Objective**: Create User and Admin iPhone apps with offline support (REQUIRED for MVP)
+**Objective**: Create User and Admin mobile apps for both Android and iOS with offline support (REQUIRED for MVP)
 
-**Duration**: 25-40 days (longest single phase)
-**Priority**: CRITICAL (cannot launch without iPhone apps)
+**Duration**: 30-50 days (longest single phase — Android-first, then iOS parallel)
+**Priority**: CRITICAL (cannot launch without mobile apps)
 **Dependencies**: Phases 3, 7, 9, 10 complete (authentication, status management, care reports, notifications)
 
-**TWO APPS REQUIRED**:
-1. **User App**: Trail system viewing, care report submission, offline support
-2. **Admin App**: Trail system management, full care report CRUD, work logs
+**FOUR APPS REQUIRED (Two per Platform)**:
+1. **Android User App** (com.traillens.app): 36 screens — trail discovery, condition viewing, care reports, TrailPulse, offline support
+2. **Android Admin App** (com.traillens.admin): 42 screens — condition management, care reports admin, team/user management
+3. **iOS User App**: Feature parity with Android User App
+4. **iOS Admin App**: Feature parity with Android Admin App
 
-**Platform**: iOS 15+, Native Swift, SwiftUI
-**Distribution**: TestFlight for MVP beta
-**Repository**: Separate iOS repository (not in main workspace)
+**Android Platform**: Android 12+ (API 31+), Kotlin 2.0+, Jetpack Compose, Material Design 3
+**iOS Platform**: iOS 16+, Native Swift, SwiftUI
+**Android Distribution**: Google Play internal testing track for MVP beta
+**iOS Distribution**: TestFlight for MVP beta
+**Repositories**: `androiduser/`, `androidadmin/` (Android), separate iOS repository (not in main workspace)
+**Design**: Figma mockups driving all screen designs (see `docs/MOBILEAPP_SCREENS.md` in each repo)
+**Post-MVP**: Consider consolidating User + Admin into single app per platform
 
 ---
 
-### Task 12.1: Set Up iOS Development Environment and Repositories
+### Task 12.1: Set Up Android Development Environment and Repositories
 
-**Objective**: Initialize iOS project structure
-
-**Research Completed**: AWS SDK for iOS reaches End of Support on August 1, 2026. MUST use AWS Amplify for Swift (v2) instead. Amplify provides modern Swift APIs with async/await, better SwiftUI integration, and long-term support.
+**Objective**: Initialize Android project structure (already in progress)
 
 **Key References**:
+- `androiduser/docs/MOBILEAPP_SCREENS.md` — 36 screens for User App
+- `androidadmin/docs/MOBILEAPP_SCREENS.md` — 42 screens for Admin App
+- `androiduser/app/CODE_STRUCTURE.md` — Architecture and file organization rules
+- `androidadmin/app/CODE_STRUCTURE.md` — Architecture and file organization rules
 
-- [AWS SDK for iOS End of Support Notice](https://github.com/aws-amplify/aws-sdk-ios)
-- [AWS Amplify for Swift Documentation](https://docs.amplify.aws/gen1/swift/prev/build-a-backend/auth/existing-resources/)
-- [AWS Blog: Using Cognito with Swift](https://aws.amazon.com/blogs/mobile/using-amazon-cognito-with-swift-sample-app-developer-guide-and-more/)
-- [Migration Guide: AWS SDK → Amplify Swift](https://aws.amazon.com/blogs/developer/announcing-new-aws-sdk-for-swift-alpha-release/)
-
-**Critical Decision**: Use AWS Amplify for Swift (v2) instead of deprecated AWS SDK for iOS.
+**Tech Stack**:
+- Kotlin 2.0+, Jetpack Compose, Material Design 3
+- Hilt for dependency injection
+- Retrofit + OkHttp for networking
+- Room for offline database
+- Firebase Cloud Messaging for push notifications
+- Coil for image loading
+- Gradle with version catalog (`gradle/libs.versions.toml`)
+- Android Credential Manager for passkeys
 
 **Implementation Steps**:
-
-1. Create new iOS repository (separate from main workspace)
-2. Initialize Xcode project with two app targets:
-   - TrailLensHQ (User App)
-   - TrailLensHQ Admin (Admin App)
-3. Configure Swift Package Manager for dependencies:
-   - **AWS Amplify for Swift** (auth, storage, API, notifications) - REQUIRED, replaces legacy SDK
-   - Alamofire (optional, for non-AWS API calls) or use URLSession directly
-   - Kingfisher or SDWebImage (image loading/caching)
-   - SwiftUI native components (preferred over third-party)
-4. Set up project structure:
-   - Shared code (Models, NetworkingManager, AuthenticationManager)
-   - User app specific views
-   - Admin app specific views
-5. Configure build settings and signing
-6. Set up TestFlight distribution
-7. Add .gitignore for Xcode
-8. Create README with setup instructions
+1. Android repositories already created (`androiduser/`, `androidadmin/`)
+2. Gradle project structure configured with version catalog
+3. CODE_STRUCTURE.md files in place for both apps
+4. Figma connection configured (`docs/FIGMA_CONFIG.md`, `docs/FIGMA_CONNECTION.md`)
+5. Configure CI/CD with GitHub Actions
+6. Set up Google Play internal testing track
 
 **Acceptance Criteria**:
-- iOS project initialized
-- Two app targets configured
-- Dependencies installed
-- TestFlight ready
+- Both Android projects building successfully
+- Figma mockups accessible for development
+- CI/CD pipeline running
 
 **AI-Assisted Timeline**: 4 hours
 
 ---
 
-### Task 12.2: Implement User App - View Trail Systems
+### Task 12.2: Implement Android User App - Trail System Discovery
 
-**Objective**: Browse and view trail systems with current status
+**Objective**: Browse and view trail systems with current conditions (7 screens in Trail Discovery section)
 
-**Files to Create**:
-- `TrailSystemListView.swift`
-- `TrailSystemDetailView.swift`
-- `TrailSystemCard.swift`
-- `StatusBadge.swift`
+**Screens**: Browse Trail Systems, Trail System Detail, Condition History, Search Filters, Map View, Subscribe Dialog, Subscription Confirmation
 
 **UI Features**:
-- List of trail systems (nearby or subscribed)
-- Search and filter
-- Trail system detail page
-- Current status display with badge
-- Status history timeline
-- Photos gallery
-- Subscribe/unsubscribe button
+- LazyColumn list of trail systems (nearby or subscribed)
+- Search and filter with Compose state management
+- Trail system detail page with condition display
+- Condition history timeline
+- Photos gallery with Coil image loading
+- Subscribe/unsubscribe with confirmation
 
 **Implementation Steps**:
-1. Create SwiftUI views
-2. Integrate with API (/trail-systems endpoints)
-3. Implement location-based sorting (nearby first)
-4. Add pull-to-refresh
-5. Implement search
+1. Create Compose screens following CODE_STRUCTURE.md feature-based organization
+2. Implement ViewModels with Hilt injection
+3. Integrate with API via Retrofit (/trail-systems endpoints)
+4. Implement location-based sorting (nearby first)
+5. Add pull-to-refresh with SwipeRefresh
 6. Create detail page with all info
-7. Add photo gallery
-8. Test on simulator and device
-
-**Testing**:
-- Browse trail systems
-- View detail page
-- Subscribe to trail system
-- Pull to refresh
-- Search for trail system
+7. Test on emulator and device
 
 **Acceptance Criteria**:
-- List view functional
-- Detail view complete
+- List view functional with LazyColumn
+- Detail view complete with condition display
 - Search working
 - Subscribe/unsubscribe working
 
@@ -4247,41 +4201,31 @@ subscriptions = Table(
 
 ---
 
-### Task 12.3: Implement User App - Submit Trail Care Reports
+### Task 12.3: Implement Android User App - Care Report Submission
 
-**Objective**: Allow users to submit care reports with camera integration
+**Objective**: Allow users to submit care reports with camera integration (5 screens in Care Reports section)
 
-**Files to Create**:
-- `SubmitReportView.swift`
-- `CameraView.swift`
-- `PhotoPickerView.swift`
+**Screens**: Create Report, Select Trail System, Add Photo, Report Detail, Add Comment
 
 **UI Features**:
-- "Submit Report" button
-- Form with title, description, location
-- Camera integration (take photos)
-- Photo library picker
+- Report submission form with Compose
+- CameraX integration (take photos)
+- PhotoPicker API for gallery selection
 - Preview before submit
 - Success confirmation
 
 **Implementation Steps**:
-1. Create report submission form
-2. Integrate UIImagePickerController for camera
-3. Implement photo selection (up to 5 photos)
-4. Add location capture (GPS)
-5. Implement photo upload to S3
-6. Call API POST /care-reports
+1. Create report submission Compose screens
+2. Integrate CameraX for camera capture
+3. Implement photo selection (up to 5 photos) via PhotoPicker API
+4. Add location capture (GPS via FusedLocationProviderClient)
+5. Implement photo upload to S3 via presigned URLs
+6. Call API POST /care-reports via Retrofit
 7. Show loading state during upload
 8. Display success message
 
-**Testing**:
-- Submit report with photos from camera
-- Submit report with photos from library
-- Submit report with location
-- Verify report appears in web UI
-
 **Acceptance Criteria**:
-- Camera integration working
+- Camera integration working via CameraX
 - Photo upload functional
 - Location capture working
 - Report creation successful
@@ -4290,134 +4234,25 @@ subscriptions = Table(
 
 ---
 
-### Task 12.4: Implement User App - View Public Care Reports
+### Task 12.4: Implement Android User App - Offline Support
 
-**Objective**: View care reports submitted by others
+**Objective**: Cache trail system conditions and create reports offline with auto-upload
 
-**Files to Create**:
-- `CareReportListView.swift`
-- `CareReportDetailView.swift`
-- `CareReportCard.swift`
-
-**UI Features**:
-- List of public care reports
-- Filter by trail system
-- Filter by status
-- Detail view with photos and comments
-- Report status updates (read-only for users)
-
-**Acceptance Criteria**:
-- List view functional
-- Filters working
-- Detail view complete
-
-**AI-Assisted Timeline**: 8 hours
-
----
-
-### Task 12.5: Implement User App - Offline Report Creation
-
-**Objective**: Create reports offline, auto-upload when signal returns
-
-**Research Completed**: Core Data vs UserDefaults comparison. **Decision: Use Core Data** for offline report queue because reports have complex structure (title, description, multiple photos, location, metadata, timestamps). UserDefaults is only suitable for simple preferences and small data.
-
-**Key References**:
-
-- [Core Data vs UserDefaults Best Practices](https://cocoacasts.com/ud-10-should-you-use-core-data-or-user-defaults)
-- [iOS Data Storage Comparison](https://fluffy.es/persist-data/)
-- [SwiftUI Core Data Integration](https://livsycode.com/best-practices/userdefaults-vs-filemanager-vs-keychain-vs-core-data-vs-swiftdata/)
-
-**Storage Decision**: Core Data for offline queue (complex objects with relationships to photos), NOT UserDefaults (performance issues with large data).
-
-**Files to Create**:
-
-- `OfflineQueueManager.swift`
-- `SyncManager.swift`
-- `OfflineReport.xcdatamodeld` (Core Data model)
+**Storage**: Room database for offline queue and status caching (complex objects with relationships to photos)
 
 **Offline Queue Logic**:
-
-1. When offline, save report to local Core Data
+1. When offline, save report to local Room database
 2. Mark as "pending_sync"
 3. Show "Offline - will sync when online" message
-4. When online, automatically upload pending reports
+4. When online, automatically upload pending reports via WorkManager
 5. Update UI when sync completes
 6. Show "Syncing X reports..." notification
 7. Handle sync failures (retry with exponential backoff)
 8. Delete successfully synced reports from queue
 9. Warn user if queue older than 7 days
 
-**Implementation Steps**:
-1. Implement network reachability detection
-2. Create offline queue with Core Data or UserDefaults
-3. Implement SyncManager to upload queued reports
-4. Add retry logic with exponential backoff
-5. Show sync status in UI
-6. Add 7-day warning for old queued reports
-7. Test with airplane mode
-
-**Testing**:
-- Enable airplane mode
-- Create report (should queue)
-- Disable airplane mode
-- Verify report auto-syncs
-- Test sync failure handling
-
-**Acceptance Criteria**:
-- Offline report creation working
-- Auto-sync on connection restore
-- 7-day warning implemented
-- Sync status visible
-
-**AI-Assisted Timeline**: 12 hours
-
----
-
-### Task 12.6: Implement User App - Push Notifications
-
-**Objective**: Receive push notifications via APNS
-
-**Files to Create**:
-- `NotificationManager.swift`
-- `PushNotificationHandler.swift`
-
-**Implementation Steps**:
-1. Request notification permissions on app launch
-2. Register device token with API (POST /devices)
-3. Handle notification receipt (app in foreground, background, closed)
-4. Implement deep linking (tap notification → trail detail)
-5. Show notification badge count
-6. Handle notification settings
-
-**Testing**:
-- Receive notification when app in foreground
-- Receive notification when app in background
-- Tap notification (verify deep link)
-- Verify badge count updates
-
-**Acceptance Criteria**:
-- Push notifications received
-- Deep linking working
-- Badge count accurate
-
-**AI-Assisted Timeline**: 8 hours
-
----
-
-### Task 12.7: Implement User App - Offline Status Caching
-
-**Objective**: Cache trail system status for 7 days, show stale data warning
-
-**Storage Decision**: Use Core Data for consistency with offline reports (Task 12.5) and because trail systems have complex structure (photos, status history, metadata). Leverages existing Core Data stack.
-
-**Files to Create**:
-
-- `CacheManager.swift`
-- `CachedTrailSystem.xcdatamodeld` (Core Data model, shared with offline queue)
-
 **Caching Logic**:
-
-1. Cache trail system data in Core Data
+1. Cache trail system data in Room database
 2. Include cached_at timestamp
 3. When offline, load from cache
 4. Show "Cached X hours ago" warning if data stale
@@ -4425,71 +4260,115 @@ subscriptions = Table(
 6. Expire cache after 7 days (force refresh)
 
 **Implementation Steps**:
-1. Implement caching layer
-2. Add cached_at timestamp to all cached data
-3. Create UI warning for stale data
-4. Implement auto-refresh logic
-5. Add manual refresh button
-6. Test with airplane mode
-
-**Testing**:
-- View trail system offline (should load from cache)
-- Verify stale data warning appears
-- Go online, verify auto-refresh
-- Test 7-day expiration
+1. Define Room entities and DAOs for offline reports and cached trail systems
+2. Implement network reachability detection
+3. Create WorkManager workers for background sync
+4. Implement retry logic with exponential backoff
+5. Show sync status in UI
+6. Add 7-day warning for old queued reports
+7. Test with airplane mode
 
 **Acceptance Criteria**:
-- Offline caching working
+- Offline report creation working
+- Auto-sync on connection restore via WorkManager
 - 7-day cache expiration
 - Stale data warning displayed
-- Auto-refresh on reconnect
 
-**AI-Assisted Timeline**: 8 hours
+**AI-Assisted Timeline**: 16 hours
 
 ---
 
-### Task 12.8: Implement Admin App - Trail System Management
+### Task 12.5: Implement Android User App - Push Notifications (FCM)
 
-**Objective**: Admin app for managing trail systems from field
-
-**Files to Create** (in Admin app target):
-- `AdminDashboard.swift`
-- `AdminTrailSystemList.swift`
-- `QuickStatusUpdate.swift`
-
-**UI Features**:
-- List trail systems for organization
-- Quick status update (one-tap)
-- Full status update (reason, photos, tags)
-- Create new trail system
-- Edit trail system
+**Objective**: Receive push notifications via Firebase Cloud Messaging
 
 **Implementation Steps**:
-1. Create admin-specific views
-2. Implement quick status buttons (Open, Closed, Caution)
-3. Implement full status update form
-4. Add trail system creation form
-5. Verify role-based access (trail-crew+ only)
+1. Configure Firebase project and add `google-services.json`
+2. Implement `FirebaseMessagingService` for token registration
+3. Register device token with API (POST /devices)
+4. Create notification channels: Trail Conditions, Care Reports, Assignments
+5. Handle notification receipt (app in foreground, background, closed)
+6. Implement deep linking via Navigation Compose (tap notification → trail detail)
+7. Show notification badge count
+8. Handle notification settings
+
+**Deep Link Schemas**:
+- `traillenshq://trail-system/{id}` → Trail system detail
+- `traillenshq://care-report/{id}` → Care report detail
+- `traillenshq://notifications` → Notifications list
+
+**Acceptance Criteria**:
+- FCM push notifications received
+- Notification channels configured
+- Deep linking working via Navigation Compose
+- Badge count accurate
+
+**AI-Assisted Timeline**: 10 hours
+
+---
+
+### Task 12.6: Implement Android User App - Authentication
+
+**Objective**: Support all five authentication methods
+
+**Implementation Steps**:
+1. Integrate AWS Amplify for Android (Cognito)
+2. Implement passwordless (email-first) login
+3. Implement magic link with deep linking
+4. Implement passkey authentication via Android Credential Manager API
+5. Implement social login (Google/Apple/Facebook)
+6. Implement admin login (hidden, for testing)
+7. Store tokens securely in EncryptedSharedPreferences
+8. Implement token refresh with AuthInterceptor
+9. Create unified login UI with Compose
+
+**Acceptance Criteria**:
+- All five auth methods working
+- Biometric prompts functional via Credential Manager
+- Tokens stored securely in EncryptedSharedPreferences
+- Session persistence working
+
+**AI-Assisted Timeline**: 16 hours
+
+---
+
+### Task 12.7: Implement Android Admin App - Conditions Management
+
+**Objective**: Admin app for managing trail system conditions from field (6 screens in Conditions section)
+
+**Screens**: Conditions List, Update Condition, Trail System Detail, Condition History, Schedule Changes, Manage Condition Types
+
+**UI Features**:
+- List trail systems for organization with current conditions
+- Quick condition update (one-tap)
+- Full condition update (reason, photos, tags)
+- Schedule future condition changes
+- Manage condition types for organization
+- Admin role validation gate (requires `trail-admin`, `trail-owner`, or `admin` Cognito group)
+
+**Implementation Steps**:
+1. Create admin-specific Compose screens
+2. Implement RoleValidator for admin group check
+3. Implement quick condition buttons (Open, Closed, Caution)
+4. Implement full condition update form
+5. Add condition type management CRUD
+6. Verify role-based access on every screen
 
 **Acceptance Criteria**:
 - Admin UI distinct from user app
-- Quick status update working
-- Full status update working
-- Role verification functional
+- Quick condition update working
+- Full condition update working
+- Role verification functional via RoleValidator
 
 **AI-Assisted Timeline**: 12 hours
 
 ---
 
-### Task 12.9: Implement Admin App - Full Care Report CRUD
+### Task 12.8: Implement Android Admin App - Care Reports Admin
 
-**Objective**: Complete care report management for trail crew
+**Objective**: Complete care report management for trail crew (6 screens in Care Reports Admin section)
 
-**Files to Create**:
-- `AdminCareReportList.swift`
-- `AdminCareReportDetail.swift`
-- `CareReportAssignment.swift`
-- `CareReportCommentForm.swift`
+**Screens**: Reports List, Report Detail, Create Report, Assign Report, Update Status, Add Comment
 
 **UI Features**:
 - List all care reports (public + private)
@@ -4502,20 +4381,13 @@ subscriptions = Table(
 - View activity log
 
 **Implementation Steps**:
-1. Create all views
+1. Create all Compose screens
 2. Implement filtering and sorting
 3. Add assignment interface
 4. Implement status workflow
-5. Create comment form
+5. Create comment form with photo upload
 6. Add priority editor
 7. Test all CRUD operations
-
-**Testing**:
-- View all reports
-- Assign report to self
-- Update status through workflow
-- Add comment with photo
-- Change priority
 
 **Acceptance Criteria**:
 - Full CRUD functional
@@ -4527,146 +4399,305 @@ subscriptions = Table(
 
 ---
 
-### Task 12.10: Implement Admin App - Work Logs (Quick Private Report Creation)
+### Task 12.9: Implement Android Admin App - Team/User Management
 
-**Objective**: Quick form for trail crew to log maintenance work
+**Objective**: Manage team members and roles (5 screens in Users/Team section)
 
-**Files to Create**:
-- `QuickWorkLogForm.swift`
+**Screens**: Members List, User Detail, Change Role, Remove User, Add User
 
 **UI Features**:
-- Quick form: title, description, photos
-- Auto-set: is_public = false, priority = P3
-- Auto-assign: assigned_to = current user
-- One-tap submit
+- List organization members with roles
+- Invite new users
+- Change user roles (org-admin, trail-crew, trail-owner, etc.)
+- Remove users from organization
+- View user activity
 
 **Implementation Steps**:
-1. Create quick form
-2. Pre-fill default values
-3. Implement fast photo capture
-4. Auto-submit on completion
+1. Create team management Compose screens
+2. Implement user invitation flow
+3. Add role management (dropdown with Cognito groups)
+4. Implement user removal with confirmation
+5. Role-gate all admin actions
 
 **Acceptance Criteria**:
-- Quick form functional
-- Defaults correct
-- Fast submission working
+- Member list functional
+- Invitation working
+- Role management functional
+- User removal working with confirmation
 
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 8 hours
 
 ---
 
-### Task 12.11: Implement Authentication (Cognito SDK with All Three Methods)
+### Task 12.10: Android Testing and Internal Distribution
 
-**Objective**: Support passkey, magic link, and email/password login
-
-**Files to Create**:
-- `AuthenticationManager.swift`
-- `LoginView.swift`
-- `PasskeyLoginView.swift`
-- `MagicLinkLoginView.swift`
+**Objective**: Test both Android apps and distribute via Google Play internal testing
 
 **Implementation Steps**:
-1. Integrate AWS Cognito SDK for iOS
-2. Implement passkey authentication with ASAuthorizationController
-3. Implement magic link with deep linking
-4. Implement email/password with Cognito
-5. Store tokens securely in iOS Keychain
-6. Implement token refresh
-7. Create unified login UI
-
-**Testing**:
-- Login with passkey (Face ID/Touch ID)
-- Login with magic link (tap email)
-- Login with email/password
-- Verify session persistence
+1. Run unit tests (90% coverage target)
+2. Run Compose UI tests for critical flows
+3. Performance testing: cold start <1.5s, 60fps scrolling, <15MB APK
+4. Test on multiple device sizes (phone, tablet)
+5. Create Google Play internal testing track listing
+6. Upload signed APK/AAB to Play Console
+7. Invite pilot testers via email
+8. Create testing instructions document
+9. Monitor crash reports via Firebase Crashlytics
 
 **Acceptance Criteria**:
-- All three auth methods working
-- Biometric prompts functional
-- Tokens stored securely in Keychain
-- Session persistence working
-
-**AI-Assisted Timeline**: 16 hours
-
----
-
-### Task 12.12: Set Up TestFlight Distribution
-
-**Objective**: Distribute apps to pilot organizations via TestFlight
-
-**Implementation Steps**:
-1. Create App Store Connect records for both apps
-2. Configure app metadata (name, description, icons)
-3. Set up TestFlight groups:
-   - Internal Testing (development team)
-   - External Testing (Hydrocut + GORBA)
-4. Upload first build to TestFlight
-5. Invite pilot users via email
-6. Create testing instructions document
-7. Monitor crash reports
-
-**Acceptance Criteria**:
-- Both apps in TestFlight
+- Both apps passing all tests
+- Performance targets met
+- Apps on Google Play internal testing track
 - Pilot users invited
-- Testing instructions sent
+
+**AI-Assisted Timeline**: 6 hours
+
+---
+
+### Task 12.11: Set Up iOS Development Environment and Repositories
+
+**Objective**: Initialize iOS project structure
+
+**Research Completed**: AWS SDK for iOS reaches End of Support on August 1, 2026. MUST use AWS Amplify for Swift (v2) instead. Amplify provides modern Swift APIs with async/await, better SwiftUI integration, and long-term support.
+
+**Key References**:
+- [AWS SDK for iOS End of Support Notice](https://github.com/aws-amplify/aws-sdk-ios)
+- [AWS Amplify for Swift Documentation](https://docs.amplify.aws/gen1/swift/prev/build-a-backend/auth/existing-resources/)
+
+**Critical Decision**: Use AWS Amplify for Swift (v2) instead of deprecated AWS SDK for iOS.
+
+**Implementation Steps**:
+1. Create new iOS repository (separate from main workspace)
+2. Initialize Xcode project with two app targets:
+   - TrailLensHQ (User App)
+   - TrailLensHQ Admin (Admin App)
+3. Configure Swift Package Manager for dependencies:
+   - **AWS Amplify for Swift** (auth, storage, API, notifications) - REQUIRED
+   - Kingfisher or SDWebImage (image loading/caching)
+   - SwiftUI native components (preferred over third-party)
+4. Set up project structure:
+   - Shared code (Models, NetworkingManager, AuthenticationManager)
+   - User app specific views
+   - Admin app specific views
+5. Configure build settings and signing
+6. Set up TestFlight distribution
+7. Add .gitignore for Xcode
+
+**Acceptance Criteria**:
+- iOS project initialized
+- Two app targets configured
+- Dependencies installed
+- TestFlight ready
 
 **AI-Assisted Timeline**: 4 hours
 
 ---
 
-### Task 12.13: Implement Deep Linking for Notifications
+### Task 12.12: Implement iOS User App - Trail System Discovery
 
-**Objective**: Tap notification → open relevant page in app
+**Objective**: Browse and view trail systems with current conditions (feature parity with Android Task 12.2)
 
-**Files to Create**:
-- `DeepLinkHandler.swift`
+**UI Features**:
+- SwiftUI List of trail systems (nearby or subscribed)
+- Search and filter
+- Trail system detail page with condition display
+- Condition history timeline
+- Photos gallery
+- Subscribe/unsubscribe button
+
+**Implementation Steps**:
+1. Create SwiftUI views (leveraging Android patterns for API integration)
+2. Integrate with API (/trail-systems endpoints) using Amplify/URLSession
+3. Implement location-based sorting (nearby first) via CoreLocation
+4. Add pull-to-refresh
+5. Implement search
+6. Create detail page with all info
+7. Add photo gallery
+8. Test on simulator and device
+
+**Acceptance Criteria**:
+- List view functional
+- Detail view complete
+- Search working
+- Subscribe/unsubscribe working
+
+**AI-Assisted Timeline**: 12 hours
+
+---
+
+### Task 12.13: Implement iOS User App - Care Report Submission
+
+**Objective**: Allow users to submit care reports with camera integration (feature parity with Android Task 12.3)
+
+**UI Features**:
+- Report submission form in SwiftUI
+- Camera integration via UIImagePickerController
+- Photo library picker via PHPickerViewController
+- Preview before submit
+- Success confirmation
+
+**Implementation Steps**:
+1. Create report submission SwiftUI views
+2. Integrate UIImagePickerController for camera
+3. Implement photo selection (up to 5 photos)
+4. Add location capture (GPS via CoreLocation)
+5. Implement photo upload to S3
+6. Call API POST /care-reports
+7. Show loading state during upload
+8. Display success message
+
+**Acceptance Criteria**:
+- Camera integration working
+- Photo upload functional
+- Location capture working
+- Report creation successful
+
+**AI-Assisted Timeline**: 10 hours
+
+---
+
+### Task 12.14: Implement iOS User App - Offline Support, Push Notifications, and Authentication
+
+**Objective**: Complete iOS user app with offline, push, and auth (feature parity with Android Tasks 12.4-12.6)
+
+**Storage Decision**: Use Core Data for offline report queue and status caching (consistency with iOS patterns, complex objects with relationships to photos)
+
+**Offline Queue Logic**: Same as Android (Task 12.4) — save to Core Data, mark pending_sync, auto-upload on reconnect, 7-day warning
+
+**Push Notifications**: APNS via AWS SNS
+1. Request notification permissions on app launch
+2. Register device token with API (POST /devices)
+3. Handle notification receipt (foreground, background, closed)
+4. Implement deep linking (tap notification → trail detail)
+
+**Authentication**: All five methods
+1. Integrate AWS Amplify for Swift (Cognito)
+2. Implement passkey with ASAuthorizationController
+3. Implement magic link with deep linking
+4. Store tokens securely in iOS Keychain
+5. Implement token refresh
 
 **Deep Link Schemas**:
 - `traillenshq://trail-system/{id}` → Trail system detail
 - `traillenshq://care-report/{id}` → Care report detail
 - `traillenshq://notifications` → Notifications list
 
+**Acceptance Criteria**:
+- Offline report creation working with Core Data
+- Auto-sync on connection restore
+- Push notifications received via APNS
+- Deep linking working
+- All five auth methods working
+- Tokens stored securely in Keychain
+
+**AI-Assisted Timeline**: 20 hours
+
+---
+
+### Task 12.15: Implement iOS Admin App
+
+**Objective**: Complete iOS admin app with conditions management, care reports admin, and team management (feature parity with Android Tasks 12.7-12.9)
+
+**UI Features (SwiftUI)**:
+- Conditions management: quick update, full condition form, condition type management, schedule changes
+- Care reports admin: full CRUD, assignment, status workflow, comments with photos
+- Team management: member list, invite, role management, user removal
+- Admin role validation gate (same logic as Android RoleValidator)
+
+**Implementation Steps**:
+1. Create admin-specific SwiftUI views (leveraging Android patterns)
+2. Implement role validation for admin group check
+3. Implement conditions management screens
+4. Implement care report admin screens
+5. Implement team/user management screens
+6. Add push notification channels for admin-specific events
+7. Test all admin workflows
+
+**Acceptance Criteria**:
+- Admin UI distinct from user app
+- All conditions management working
+- Full care report CRUD functional
+- Team management functional
+- Role verification working
+
+**AI-Assisted Timeline**: 20 hours
+
+---
+
+### Task 12.16: Implement iOS Deep Linking and Notification Handling
+
+**Objective**: Configure URL schemes and deep linking for iOS notifications
+
 **Implementation Steps**:
 1. Configure URL schemes in Xcode
-2. Implement deep link routing
+2. Implement deep link routing via SwiftUI navigation
 3. Handle links when app closed, background, foreground
 4. Extract parameters from URL
 5. Navigate to appropriate view
 6. Test all link types
-
-**Testing**:
-- Tap notification for trail system
-- Verify app opens to correct detail page
-- Test when app closed
-- Test when app in background
 
 **Acceptance Criteria**:
 - Deep linking functional
 - Works in all app states
 - Parameters extracted correctly
 
+**AI-Assisted Timeline**: 4 hours
+
+---
+
+### Task 12.17: iOS Testing and TestFlight Distribution
+
+**Objective**: Test both iOS apps and distribute via TestFlight
+
+**Implementation Steps**:
+1. Run unit tests (90% coverage target)
+2. Run SwiftUI preview tests for critical flows
+3. Performance testing: cold start <3s, smooth scrolling
+4. Test on multiple device sizes (iPhone, iPad)
+5. Create App Store Connect records for both apps
+6. Configure app metadata (name, description, icons)
+7. Set up TestFlight groups:
+   - Internal Testing (development team)
+   - External Testing (Hydrocut + GORBA)
+8. Upload first build to TestFlight
+9. Invite pilot users via email
+10. Create testing instructions document
+11. Monitor crash reports
+
+**Acceptance Criteria**:
+- Both apps passing all tests
+- Both apps in TestFlight
+- Pilot users invited
+- Testing instructions sent
+
 **AI-Assisted Timeline**: 6 hours
 
 ---
 
-**Phase 12 Total Duration**: 25-40 days
+**Phase 12 Total Duration**: 30-50 days
 **Phase 12 Success Criteria**:
-- User App complete with:
-  - Trail system viewing
-  - Care report submission with camera
+- Android User App (36 screens) complete with:
+  - Trail system discovery and condition viewing
+  - Care report submission with camera (CameraX)
   - View public care reports
-  - Offline report creation (7-day queue)
-  - Push notifications (APNS)
-  - Offline status caching (7 days)
-- Admin App complete with:
-  - Trail system management
-  - Full care report CRUD
-  - Work log creation (private reports)
-  - All admin features
-- Authentication with all three methods (passkey, magic link, email/password)
-- TestFlight distribution setup
-- Deep linking functional
-- Both apps in TestFlight for pilot testing
+  - TrailPulse condition observations
+  - Offline report creation (Room, 7-day queue)
+  - Push notifications (FCM via AWS SNS)
+  - Offline status caching (Room, 7 days)
+- Android Admin App (42 screens) complete with:
+  - Conditions management (quick update + full form)
+  - Full care report CRUD with assignment workflow
+  - Team/user management
+  - TrailPulse observation management
+  - Admin role validation gate
+- iOS User App complete with feature parity (SwiftUI, Core Data, APNS)
+- iOS Admin App complete with feature parity (SwiftUI, Core Data, APNS)
+- Authentication with all five methods on both platforms (passwordless, magic link, passkey, social, admin login)
+- Android: Google Play internal testing track distribution
+- iOS: TestFlight distribution
+- Deep linking functional on both platforms
+- All apps available for pilot testing
+- Performance: Android cold start <1.5s, 60fps, <15MB APK; iOS cold start <3s
 
 ---
 
@@ -4676,7 +4707,7 @@ subscriptions = Table(
 
 **Duration**: 3-5 days
 **Priority**: CRITICAL (validates MVP)
-**Dependencies**: Phases 11-12 complete (web dashboards and iPhone apps ready)
+**Dependencies**: Phases 11-12 complete (webui dashboards and mobile apps ready)
 
 ### Task 13.1: Create Hydrocut Organization and Trail System
 
@@ -4845,13 +4876,13 @@ subscriptions = Table(
 
 ### Task 13.7: Set Up TestFlight for Pilot Users
 
-**Objective**: Distribute iPhone apps to pilot users
+**Objective**: Distribute mobile apps to pilot users
 
 **Implementation Steps**:
 1. Add pilot user emails to TestFlight
 2. Send TestFlight invitations
 3. Provide installation instructions
-4. Help users install apps on their iPhones
+4. Help users install apps on their devices (Android via Play Store internal track, iOS via TestFlight)
 5. Verify all users successfully installed
 6. Provide app usage guide
 
@@ -5114,13 +5145,15 @@ subscriptions = Table(
 
 ---
 
-## Phase 15: TrailPulse - Trail Feedback and Usage Tracking
+## Phase 15: TrailPulse - Trail Feedback and Usage Tracking (MVP-REQUIRED)
 
 **Objective**: Implement trail feedback collection and GPS-based usage tracking system
 
 **Duration**: 12-18 days
-**Priority**: HIGH (new feature, enhances trail system management)
-**Dependencies**: Phases 5 (Trail System Model), 10 (Notifications), 12 (iPhone Apps for GPS)
+**Priority**: **MVP-REQUIRED** (user condition feedback is critical for trail management decisions)
+**Dependencies**: Phases 5 (Trail System Model), 10 (Notifications), 12 (Mobile Apps for GPS)
+
+**MVP Scope Note**: The MVP implements the **condition observation subset** of TrailPulse: 6 API endpoints for user-submitted condition observations, admin observation management (view/acknowledge/close/delete), and observation summary aggregation. GPS geofencing, ride detection, post-ride notifications, crew management, and frequency-based questions are deferred to post-MVP.
 
 ### Overview
 
@@ -5430,7 +5463,7 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 **Objective**: Manual feedback form for web users
 
 **Implementation Steps:**
-1. Create React component in `web/src/components/TrailPulse/`
+1. Create React component in `webui/src/features/trails/components/TrailPulse/`
 2. Fetch subscribed trail systems dropdown
 3. Fetch feedback config (conditions, questions)
 4. Build form UI with:
@@ -5460,7 +5493,7 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 **Objective**: Trail system owner configuration UI
 
 **Implementation Steps:**
-1. Create React components in `web/src/components/Admin/TrailPulse/`
+1. Create React components in `webui/src/features/admin/components/TrailPulse/`
 2. **Trail Condition Management:**
    - List current conditions
    - Add new condition (name, multiselect, display order)
@@ -5505,7 +5538,7 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 **Objective**: Feedback viewing, filtering, and management UI
 
 **Implementation Steps:**
-1. Create React components in `web/src/components/Admin/TrailPulse/`
+1. Create React components in `webui/src/features/admin/components/TrailPulse/`
 2. **Feedback Data Table:**
    - Display feedback in paginated table
    - Columns: Date, User, Conditions, Responses, Comments, Crew Status
@@ -5615,7 +5648,7 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 **Objective**: Add TrailPulse to website features page
 
 **Implementation Steps:**
-1. Edit `web/src/data/features.js`
+1. Edit `webui/src/features/public/data/features.ts`
 2. Add TrailPulse feature object (ID 8):
    ```javascript
    {
@@ -5726,7 +5759,7 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 **Phase 15 Dependencies**:
 - Phase 5 (Trail System Model) - Required for trail system associations
 - Phase 10 (Notification System) - Required for SNS push notification infrastructure
-- Phase 12 (iPhone Apps) - Mobile team needs APIs for GPS integration
+- Phase 12 (Mobile Apps) - Mobile team needs APIs for GPS integration
 
 **Phase 15 Notes**:
 - This phase focuses on backend and web implementation
@@ -5758,8 +5791,8 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 | 9     | Trail Care Reports System        | Phases 5, 6 (requires model + type tags)    | 10-14 days | Phases 5, 6 complete         |
 | 10    | Notification System              | Phases 7, 9 (status changes + reports)      | 5-7 days   | Phases 7, 9 complete         |
 | 11    | Web Dashboards                   | Phases 7, 9, 10 (all core features)         | 10-14 days | Phases 7, 9, 10 complete     |
-| 12    | iPhone Apps                      | Phases 3, 7, 9, 10 (auth + core features)   | 25-40 days | Phases 3, 7, 9, 10 complete  |
-| 13    | Pilot Onboarding                 | Phases 11, 12 (web + mobile ready)          | 3-5 days   | Phases 11, 12 complete       |
+| 12    | Mobile Apps (Android + iOS)      | Phases 3, 7, 9, 10 (auth + core features)  | 30-50 days | Phases 3, 7, 9, 10 complete  |
+| 13    | Pilot Onboarding                 | Phases 11, 12 (webui + mobile apps ready)          | 3-5 days   | Phases 11, 12 complete       |
 | 14    | Testing and Validation           | Phase 13 (all features + pilots)            | 7-10 days  | Phase 13 complete            |
 
 ### Critical Path Analysis
@@ -5769,15 +5802,15 @@ The **critical path** represents the longest sequence of dependent phases that d
 **Critical Path Sequence:**
 ```
 Phase 2 (Security) → Phase 3 (Auth) → Phase 5 (Trail Model) → Phase 7 (Status) → 
-Phase 10 (Notifications) → Phase 11 (Web Dashboards) → Phase 12 (iPhone Apps) → 
+Phase 10 (Notifications) → Phase 11 (Web Dashboards) → Phase 12 (Mobile Apps) → 
 Phase 13 (Pilot) → Phase 14 (Testing)
 ```
 
 **Critical Path Duration:**
-- **AI-Assisted**: 5-7 + 7-10 + 5-7 + 7-10 + 5-7 + 10-14 + 25-40 + 3-5 + 7-10 = **74-110 days**
-- **Critical Path Optimistic**: ~74 days (10.5 weeks)
-- **Critical Path Realistic**: ~92 days (13 weeks)
-- **Critical Path Pessimistic**: ~110 days (15.5 weeks)
+- **AI-Assisted**: 5-7 + 7-10 + 5-7 + 7-10 + 5-7 + 10-14 + 30-50 + 3-5 + 7-10 = **79-120 days**
+- **Critical Path Optimistic**: ~79 days (11 weeks)
+- **Critical Path Realistic**: ~100 days (14 weeks)
+- **Critical Path Pessimistic**: ~120 days (17 weeks)
 
 ### Parallelization Opportunities
 
@@ -5805,7 +5838,7 @@ Several phases can run in parallel to optimize timeline:
 **Wave 6 (After Status + Reports):**
 - Phase 10: Notifications (5-7 days) - CRITICAL PATH
 - Phase 11: Web Dashboards (10-14 days) - Can start when Phase 10 starts
-- Phase 12: iPhone Apps (25-40 days) - Can start when Phase 10 starts
+- Phase 12: Mobile Apps (30-50 days) - Android can start when Phase 10 starts; iOS starts after Android beta
 
 **Wave 7 (After All Features):**
 - Phase 13: Pilot Onboarding (3-5 days) - CRITICAL PATH
@@ -5815,10 +5848,10 @@ Several phases can run in parallel to optimize timeline:
 
 **High-Risk Dependencies:**
 
-1. **Phase 12 (iPhone Apps) - 25-40 days**
+1. **Phase 12 (Mobile Apps) - 30-50 days**
    - **Risk 1**: Longest phase, blocks pilot launch
-   - **Mitigation**: Start iPhone development as early as possible (after Phase 3), parallelize with Phases 7-11
-   - **Contingency**: Consider phased iPhone rollout (User App first, Admin App in Phase 2)
+   - **Mitigation**: Start Android development as early as possible (after Phase 3), parallelize with Phases 7-11
+   - **Contingency**: Consider phased mobile rollout (Android apps first, Admin App in Phase 2)
    - **Risk 2**: ~~AWS SDK for iOS dependency~~ **RESOLVED - Research Complete**
    - **Research Findings**: AWS SDK for iOS reaches End of Support on August 1, 2026 (during MVP timeframe). MUST use AWS Amplify for Swift instead.
    - **Updated Risk**: None - plan updated to use AWS Amplify for Swift (v2) with long-term support
@@ -5842,25 +5875,25 @@ Several phases can run in parallel to optimize timeline:
 
 ### Optimized Timeline Strategy
 
-**Best-Case Scenario (74 days / 10.5 weeks):**
+**Best-Case Scenario (79 days / 11 weeks):**
 - Maximum parallelization
 - No blockers or rework
 - All AI estimates hit optimistic targets
-- **Target Launch**: End of Q1 2026 (late March)
+- **Target Launch**: Early Q2 2026 (early April)
 
-**Realistic Scenario (92 days / 13 weeks):**
+**Realistic Scenario (100 days / 14 weeks):**
 - Standard parallelization
 - Minor blockers and rework (10-15% overhead)
 - AI estimates hit realistic targets
 - **Target Launch**: Mid Q2 2026 (mid-April to early May)
 
-**Pessimistic Scenario (110 days / 15.5 weeks):**
+**Pessimistic Scenario (120 days / 17 weeks):**
 - Limited parallelization
 - Significant blockers and rework (20-30% overhead)
 - AI estimates hit pessimistic targets
 - **Target Launch**: Late Q2 2026 (late May to early June)
 
-**Recommended Approach**: Plan for **realistic scenario (92 days)** with built-in buffer for unexpected issues.
+**Recommended Approach**: Plan for **realistic scenario (100 days)** with built-in buffer for unexpected issues.
 
 
 ---
@@ -5930,26 +5963,26 @@ Several phases can run in parallel to optimize timeline:
 #### **Week 9: Notifications & Dashboards (Mar 17-23)**
 - **Phase 10**: Notification System COMPLETE (Day 1-4)
 - **Phase 11**: Web Dashboards START (Day 5-7)
-- **Phase 12**: iPhone Apps START (parallel, Day 1-7)
+- **Phase 12**: Mobile Apps START — Android development (parallel, Day 1-7)
 - **Deliverables**: Email/SMS/push working, subscription system live
 - **Milestone**: M8 - Notification System Complete
 
-#### **Week 10-11: Dashboards & iPhone Development (Mar 24 - Apr 6)**
+#### **Week 10-11: Dashboards & Mobile Development (Mar 24 - Apr 6)**
 - **Phase 11**: Web Dashboards CONTINUE (Week 10: Day 1-7, Week 11: Day 1-4)
-- **Phase 12**: iPhone Apps CONTINUE (parallel, Week 10-11: Day 1-14)
-- **Deliverables**: 8 role-specific dashboards, analytics pages, iPhone basic UI
+- **Phase 12**: Android Apps CONTINUE (parallel, Week 10-11: Day 1-14)
+- **Deliverables**: 8 role-specific dashboards, analytics pages, Android User + Admin basic UI
 
-#### **Week 12: Dashboard Complete & iPhone Continue (Apr 7-13)**
+#### **Week 12: Dashboard Complete & Mobile Continue (Apr 7-13)**
 - **Phase 11**: Web Dashboards COMPLETE (Day 1-3)
-- **Phase 12**: iPhone Apps CONTINUE (Day 1-7)
-- **Deliverables**: All dashboards live, bulk operations working, iPhone offline support
+- **Phase 12**: Android Apps CONTINUE (Day 1-5), iOS Apps START (Day 3-7)
+- **Deliverables**: All dashboards live, bulk operations working, Android offline support, iOS project initialized
 - **Milestone**: M9 - Web Dashboards Complete
 
-#### **Week 13: iPhone Apps & Pilot Prep (Apr 14-20)**
-- **Phase 12**: iPhone Apps COMPLETE (Day 1-5)
+#### **Week 13-14: Mobile Apps & Pilot Prep (Apr 14-20)**
+- **Phase 12**: Android Apps COMPLETE (Day 1-3), iOS Apps CONTINUE (Day 1-14)
 - **Phase 13**: Pilot Onboarding START (Day 6-7)
-- **Deliverables**: User + Admin apps on TestFlight, push notifications working
-- **Milestone**: M10 - iPhone Apps Complete
+- **Deliverables**: Android User + Admin on Google Play internal track, iOS User + Admin on TestFlight, push notifications working (FCM + APNS)
+- **Milestone**: M10 - Mobile Apps Complete
 
 #### **Week 14: Pilot Launch & Testing (Apr 21-27)**
 - **Phase 13**: Pilot Onboarding COMPLETE (Day 1-2)
@@ -5970,13 +6003,13 @@ Several phases can run in parallel to optimize timeline:
 | M1        | Jan 22, 2026 | Brand Launch                                                                | New byline live on website, marketing materials updated                                                           |
 | M2        | Feb 2, 2026  | Security Hardening Complete                                                 | CloudTrail (1-year), WAF, secrets rotation (180-day), incident response plan, API rate limiting                   |
 | M3        | Feb 9, 2026  | Authentication System Complete                                              | Passkey (inherently MFA) + magic link + email/password working, admin MFA enforced for password logins           |
-| M4        | Feb 16, 2026 | Trail System Data Model Complete                                            | 21 DynamoDB tables deployed, trail system CRUD APIs working                                                       |
+| M4        | Feb 16, 2026 | Trail System Data Model Complete                                            | DynamoDB entity types implemented (7-table multi-table per ADR-001), trail system CRUD APIs working                                                       |
 | M5        | Feb 23, 2026 | Tag-Based Organization Complete                                             | Max 10 status tags per org, tag CRUD working                                                                      |
 | M6        | Mar 9, 2026  | Status Management Complete                                                  | Status types, history, photos, bulk updates, scheduled changes working                                            |
 | M7        | Mar 16, 2026 | Trail Care Reports Complete                                                 | P1-P5 reports, type tags (max 25), assignments, comments, photo uploads working                                   |
-| M8        | Mar 23, 2026 | Notification System Complete                                                | Email (SES), SMS (Pinpoint), Push (SNS→APNS), subscriptions, preferences working                                  |
+| M8        | Mar 23, 2026 | Notification System Complete                                                | Email (SES), SMS (Pinpoint), Push (SNS→FCM + SNS→APNS), subscriptions, preferences working                                  |
 | M9        | Apr 13, 2026 | Web Dashboards Complete                                                     | 8 role-specific dashboards, analytics, bulk operations live                                                       |
-| M10       | Apr 20, 2026 | iPhone Apps Complete                                                        | User + Admin apps on TestFlight, offline support, push notifications                                              |
+| M10       | Apr 20, 2026 | Mobile Apps Complete                                                        | Android + iOS apps on Play internal track and TestFlight, offline support, push notifications                                              |
 | M11       | Apr 23, 2026 | Pilot Organizations Live                                                    | Hydrocut + GORBA onboarded, 3 trail systems operational (Hydrocut: 1, GORBA: 2), admins trained                  |
 | M12       | May 6, 2026  | MVP LAUNCH                                                                  | All 14 phases complete, testing passed, pilots validated, ready for public launch                                 |
 
@@ -5987,7 +6020,7 @@ Several phases can run in parallel to optimize timeline:
 - **Launch Date**: Late June to mid-July 2026
 - **Developer Effort**: 2-3 full-time engineers
 
-**AI-Assisted Timeline (Claude Sonnet 4.5):**
+**AI-Assisted Timeline (Claude Sonnet 4.6 / Claude Opus 4.6):**
 - **Estimated Duration**: 74-110 days (10.5-15.5 weeks)
 - **Target Launch**: Late March to early June 2026
 - **Developer Effort**: 1-2 full-time engineers
@@ -6001,11 +6034,11 @@ Several phases can run in parallel to optimize timeline:
 
 ### Timeline Risks and Contingencies
 
-**Risk 1: iPhone Development Delays (Phase 12)**
+**Risk 1: Mobile Development Delays (Phase 12)**
 - **Probability**: Medium (30%)
-- **Impact**: High (25-40 day phase)
-- **Mitigation**: Start iPhone development early (Week 9), parallelize with dashboards
-- **Contingency**: Launch web-only MVP, add iPhone apps in Phase 2 release
+- **Impact**: High (30-50 day phase)
+- **Mitigation**: Start Android development early (Week 9), parallelize with dashboards
+- **Contingency**: Launch web-only MVP, add mobile apps in Phase 2 release
 
 **Risk 2: Authentication Complexity (Phase 3)**
 - **Probability**: Medium (25%)
@@ -6029,7 +6062,7 @@ Several phases can run in parallel to optimize timeline:
 
 **2 Weeks Before Launch (Week 13):**
 - [ ] All 14 phases code-complete
-- [ ] iPhone apps on TestFlight with 10+ beta testers
+- [ ] Android apps on Play internal track, iOS apps on TestFlight
 - [ ] Performance testing passed (<500ms API response, 99.9% uptime)
 - [ ] Security audit complete (no P1/P2 vulnerabilities)
 - [ ] Pilot organizations using system daily
@@ -6078,7 +6111,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - [ ] Magic link authentication working (15-minute expiration, AWS SES delivery)
 - [ ] Email/password authentication working (12+ chars, mixed case, numbers, symbols, 6-password history)
 - [ ] Unified login experience across all three methods
-- [ ] iPhone app authentication integrated (all three methods)
+- [ ] Mobile app authentication integrated (all five methods: passwordless, magic link, passkey, social login, admin login)
 - [ ] User documentation for all authentication methods
 
 #### **4. PII Protection (Phase 4)**
@@ -6088,7 +6121,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - [ ] Monthly automated cleanup job running (DynamoDB TTL + Lambda)
 
 #### **5. Trail System Data Model (Phase 5)**
-- [ ] 21 DynamoDB tables deployed with proper indexes
+- [ ] DynamoDB entity types implemented (7-table multi-table per ADR-001; single-table design documented with 16 entity types and 5 overloaded GSIs for scale target)
 - [ ] Trail System CRUD APIs working (create, read, update, delete)
 - [ ] Trail System edit history tracking (5-year retention)
 - [ ] Legacy trail data migrated to trail system model
@@ -6131,7 +6164,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 #### **10. Notification System (Phase 10)**
 - [ ] Email notifications working (AWS SES, status changes + new reports)
 - [ ] SMS notifications working (AWS Pinpoint, emergency status changes)
-- [ ] Push notifications working (AWS SNS → APNS, status + reports + assignments)
+- [ ] Push notifications working (AWS SNS → FCM for Android + SNS → APNS for iOS, status + reports + assignments)
 - [ ] Subscription system working (subscribe to trail systems, organizations, specific statuses)
 - [ ] Notification preferences working (per channel, per type)
 - [ ] Unsubscribe links in all emails
@@ -6150,14 +6183,18 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - [ ] Analytics pages (usage stats, report trends, status change frequency)
 - [ ] Bulk operations (bulk assign reports, bulk update statuses)
 
-#### **12. iPhone Apps (Phase 12)**
-- [ ] **User App**: Trail system discovery, status alerts, public reports, submit reports with camera
-- [ ] **Admin App**: Status updates, full report CRUD, assignments, offline work logs
-- [ ] Both apps on TestFlight with 10+ beta testers
-- [ ] Offline support working (7-day queue, sync on reconnect)
-- [ ] Push notifications working (APNS integration)
-- [ ] Photo uploads with camera integration
-- [ ] App Store submission ready (screenshots, descriptions, metadata)
+#### **12. Mobile Apps (Phase 12)**
+- [ ] **Android User App** (36 screens): Trail system discovery, condition viewing, care reports, TrailPulse observations, offline support
+- [ ] **Android Admin App** (42 screens): Conditions management, full care report CRUD, team/user management, admin role gate
+- [ ] **iOS User App**: Feature parity with Android User App
+- [ ] **iOS Admin App**: Feature parity with Android Admin App
+- [ ] Android apps on Google Play internal testing track with 10+ beta testers
+- [ ] iOS apps on TestFlight with 10+ beta testers
+- [ ] Offline support working on both platforms (7-day queue, sync on reconnect)
+- [ ] Push notifications working (FCM for Android, APNS for iOS)
+- [ ] Photo uploads with camera integration on both platforms
+- [ ] Android: Play Store listing ready; iOS: App Store submission ready
+- [ ] Performance: Android cold start <1.5s, 60fps, <15MB APK
 
 #### **13. Pilot Onboarding (Phase 13)**
 
@@ -6194,7 +6231,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - **Security Vulnerabilities**: 0 high/critical severity vulnerabilities
 - **Accessibility**: WCAG 2.1 Level AA compliance for web app
 - **Browser Support**: Chrome, Safari, Firefox, Edge (latest 2 versions)
-- **Mobile OS Support**: iOS 16+, Android 12+ (post-MVP)
+- **Mobile OS Support**: Android 12+ (API 31+), iOS 16+
 - **Documentation**: 100% API documentation coverage
 - **Code Quality**: Pass black, isort, flake8 linters (Python), ESLint (JavaScript)
 
@@ -6206,7 +6243,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - **Daily Active Usage**: At least 5 users logging in daily
 - **Care Reports Created**: At least 20 care reports created during pilot
 - **Status Updates**: At least 50 status updates during pilot
-- **Mobile App Usage**: At least 5 users using iPhone apps daily
+- **Mobile App Usage**: At least 5 users using Android or iOS apps daily
 
 ### User Satisfaction Requirements
 
@@ -6282,13 +6319,14 @@ When these criteria are met, the executive team will approve **MVP v1.13 public 
 | Version | Date       | Author             | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |---------|------------|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1.0     | 2026-01-17 | Product Management | Initial comprehensive MVP implementation plan created. Detailed all 14 phases with 85+ tasks covering: Brand Messaging Update, Security Hardening (CloudTrail 1-year, WAF, secrets 180-day rotation, MFA), Authentication System (passkey, magic link, email/password), PII Protection (2-year retention), Trail System Data Model (21 DynamoDB tables), Tag-Based Status Organization (max 10 tags), Status Management (7 types, photos, history), Scheduled Status Changes, Trail Care Reports (P1-P5, type tags max 25, assignments, comments, offline support), Notification System (email/SMS/push), Web Dashboards (8 roles), iPhone Apps (User + Admin, offline queue), Pilot Onboarding (Hydrocut + GORBA), Testing and Validation. Includes dependencies matrix, critical path analysis (74-110 days), timeline (16-week roadmap), success criteria (functional, performance, quality, pilot requirements), and AI-assisted development impact (1.8x productivity gain). Target launch: Q2 2026 (April-May). |
+| 1.1     | 2026-03-27 | Product Management | V4 Update: (1) Android apps replace iOS as first mobile priority — both platforms now in MVP. Android User App (36 screens, Kotlin 2.0+/Compose/MD3/Hilt) and Admin App (42 screens) with Figma-driven design. iOS as parallel track with same level of detail. (2) DynamoDB updated from 21-table multi-table to single-table design documentation (16 MVP entity types, 5 overloaded GSIs, 78 access patterns). Current production: 7-table per ADR-001. (3) web/ deprecated, replaced by webui/ greenfield rewrite (React 19 + TypeScript + Vite 6.x + Tailwind CSS 4.x + shadcn/ui + Tremor + Zustand 5.x + React Query 5.x). (4) Push notifications updated for both FCM (Android) and APNS (iOS). (5) Phase 12 duration 30-50 days. (6) All web/src/*.jsx references updated to webui/src/features/*.tsx. |
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2026-01-17  
+**Document Version**: 1.1  
+**Last Updated**: 2026-03-27  
 **Document Owner**: Product Management  
-**Status**: FINAL - Ready for Executive Review
+**Status**: V4 - Updated for Android-first mobile, single-table DynamoDB, webui/ rewrite
 
 ---
 

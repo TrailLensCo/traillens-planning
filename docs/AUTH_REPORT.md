@@ -162,11 +162,16 @@ self.user_pool_client = aws.cognito.UserPoolClient(
     f"{name}-app-client",
     name=f"{name_prefix}-app-client",
     user_pool_id=self.user_pool.id,
-    explicit_auth_flows=["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
+    explicit_auth_flows=[
+        "ALLOW_USER_SRP_AUTH",
+        "ALLOW_REFRESH_TOKEN_AUTH",
+        "ALLOW_CUSTOM_AUTH",  # Enable custom auth flow for passwordless
+        "ALLOW_USER_AUTH",  # Required for WebAuthn/passkey support
+    ],
     generate_secret=False,
     # OAuth configuration
     allowed_oauth_flows_user_pool_client=True,
-    allowed_oauth_flows=["implicit", "code"],
+    allowed_oauth_flows=["code"],
     allowed_oauth_scopes=["openid", "email", "profile"],
     callback_urls=[callback_url],
     logout_urls=[callback_url],
@@ -1706,10 +1711,11 @@ Apple Test Account:
 - Email-based OTP codes
 - Cognito supports via custom authentication flows
 
-**Step 3: Biometric Authentication (Future)**
-- WebAuthn/FIDO2 integration
-- Passkeys support
-- Requires mobile app or modern browser support
+**Step 3: Biometric Authentication ✅ COMPLETE**
+- Cognito Native WebAuthn (FIDO2/passkeys) — ESSENTIALS tier enabled
+- `USER_AUTH` flow with `WEB_AUTHN` challenge type — client-side Cognito SDK
+- `FactorConfiguration=MULTI_FACTOR_WITH_USER_VERIFICATION` — admin passkey UX
+- Frontend implementation deferred to separate PRs (androiduser, web)
 
 **Reference:** [Passwordless & MFA in 2026](https://www.loginradius.com/blog/identity/passwordless-and-mfa) [26]
 
