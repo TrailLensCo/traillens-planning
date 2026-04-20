@@ -71,7 +71,7 @@ The diagram above shows the complete system architecture including all client ap
 
 - **Platform:** Apple App Store (TestFlight for MVP beta)
 - **Purpose:** Trail system management and Trail Care Report handling for trail crew
-- **Authentication:** AWS Cognito SDK with role verification (trail-crew+ only)
+- **Authentication:** AWS Cognito SDK with role verification (trailsystem-crew+ only)
 - **Key Features:**
   - Quick trail system status updates from field
   - Full Trail Care Report CRUD (view, create, edit, assign, comment, close)
@@ -198,7 +198,7 @@ All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/
   - **Native WebAuthn Passkey**: Touch ID, Face ID, security keys via Cognito Native WebAuthn (USER_AUTH flow + WEB_AUTHN challenge). No custom backend — client-side Cognito SDK handles registration and authentication.
   - **Magic Link**: Email-based passwordless login (15-minute expiration link via AWS SES + CUSTOM_AUTH triggers)
   - **Email/Password**: Traditional authentication with MFA enforcement for admin roles (7-day grace period)
-- **MFA Configuration:** OPTIONAL at Cognito level. Enforced at FastAPI middleware level for org-admin, trail-owner, and superadmin roles (7-day grace period). WebAuthn passkeys are inherently multi-factor and satisfy MFA requirements.
+- **MFA Configuration:** OPTIONAL at Cognito level. Enforced at FastAPI middleware level for org-admin, trailsystem-owner, and superadmin roles (7-day grace period). WebAuthn passkeys are inherently multi-factor and satisfy MFA requirements.
 - **FactorConfiguration:** `MULTI_FACTOR_WITH_USER_VERIFICATION` — set via `set-cognito-mfa-config.py` boto3 script on every `pulumi up` (idempotent). Required to allow MFA-enabled admins to use passkeys.
 - **WebAuthn Configuration:** `relying_party_id=traillenshq.com`, `user_verification=preferred`
 - **Token Type:** RS256 JWT (JSON Web Tokens) issued by Cognito, verified via JWKS endpoint. HS256 is NOT accepted.
@@ -212,12 +212,12 @@ All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/
   - Requires: uppercase, lowercase, numbers, symbols
   - Password history: 6 (prevent reuse of last 6 passwords)
 - **User Groups (8 roles):**
-  - `traillenshq-admin`: Platform super admin
+  - `super-admin`: Platform super admin
   - `admin`: Site administrator
   - `org-admin`: Organization administrator
-  - `trail-owner`: Trail management permissions
-  - `trail-crew`: Trail maintenance permissions
-  - `trail-status`: Trail status update only
+  - `trailsystem-owner`: Trail management permissions
+  - `trailsystem-crew`: Trail maintenance permissions
+  - `trailsystem-status`: Trail status update only
   - `content-moderator`: Content moderation
   - `org-member`: Basic organization member
 - **Email Integration:** Uses Amazon SES for sending (no 50/day limit)
@@ -320,7 +320,7 @@ All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using co
 #### **Amazon SNS (Simple Notification Service)**
 - **Purpose:** Push notification delivery to mobile devices
 - **Topics:**
-  - `trail-status`: Trail status change notifications
+  - `trailsystem-status`: Trail status change notifications
 - **Platform Applications:**
   - APNS (iOS): Requires Apple Push Notification certificate
   - FCM (Android): Requires Firebase Cloud Messaging API key
@@ -479,7 +479,7 @@ Infrastructure and application code deploy independently via separate Pulumi sta
 2. App sends authenticated request to API Gateway
 3. API Gateway validates JWT with Cognito
 4. Main API Lambda executes:
-   - Validates user has `trail-owner`, `trail-crew`, or `admin` group
+   - Validates user has `trailsystem-owner`, `trailsystem-crew`, or `admin` group
    - Updates trail status in DynamoDB trails table
    - Writes history entry to trail_history table
    - Triggers SNS notification to subscribed users
@@ -538,7 +538,7 @@ Infrastructure and application code deploy independently via separate Pulumi sta
     - Email/Password: 12+ character minimum with complexity requirements
 - **Authorization:** Role-based access control (8 Cognito groups)
 - **Token Expiration:** Access tokens expire after 1 hour, refresh tokens after 30 days
-- **MFA Enforcement:** Required for org-admin, trail-owner, superadmin roles (7-day grace period)
+- **MFA Enforcement:** Required for org-admin, trailsystem-owner, superadmin roles (7-day grace period)
 - **Password Policy:** 12+ chars, mixed case, numbers, symbols, 6-password history
 
 ### 2. Data Encryption

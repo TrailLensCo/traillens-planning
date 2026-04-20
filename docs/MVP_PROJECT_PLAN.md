@@ -1386,7 +1386,7 @@ REACT_APP_COGNITO_DOMAIN=auth.dev.traillenshq.com
 
 ### Task 2.6: Implement MFA Enforcement for Admin Roles
 
-**Objective**: Require multi-factor authentication for org-admin, trail-owner, and superadmin roles with 7-day grace period
+**Objective**: Require multi-factor authentication for org-admin, trailsystem-owner, and superadmin roles with 7-day grace period
 
 **IMPORTANT CLARIFICATION**: This task applies to admin users who authenticate with **password-based login**. Admin users who authenticate with **passkeys DO NOT need traditional MFA** because passkeys are inherently multi-factor (something you have + something you are/know). Passkey authentication is more secure than password + SMS/TOTP.
 
@@ -2253,7 +2253,7 @@ trail_system_history = Table(
 2. Implement CRUD endpoints
 3. Add tenant isolation (filter by org_id)
 4. Implement status update logic with history recording
-5. Add authorization checks (org-admin, trail-owner, trail-crew)
+5. Add authorization checks (org-admin, trailsystem-owner, trailsystem-crew)
 6. Write unit tests for all endpoints
 7. Write integration tests
 
@@ -2468,7 +2468,7 @@ status_tags = Table(
 
 ### Task 6.3: Implement Tag Assignment to Status Types
 
-**Objective**: Allow trail-crew to tag status updates
+**Objective**: Allow trailsystem-crew to tag status updates
 
 **Files to Modify**:
 - `api-dynamo/services/trail_system_service.py` (update status logic)
@@ -2875,7 +2875,7 @@ scheduled_status_changes = Table(
 
 ### Task 8.2: Implement Scheduled Changes CRUD API
 
-**Objective**: Allow trail-crew to schedule future status changes
+**Objective**: Allow trailsystem-crew to schedule future status changes
 
 **Files to Modify**:
 - `api-dynamo/routes/scheduled_changes.py` (new file)
@@ -2890,7 +2890,7 @@ scheduled_status_changes = Table(
 1. Implement endpoints with validation
 2. Prevent scheduling in the past
 3. Allow multiple schedules per trail system
-4. Add authorization (trail-crew+)
+4. Add authorization (trailsystem-crew+)
 5. Write tests
 
 **Acceptance Criteria**:
@@ -2959,7 +2959,7 @@ scheduled_status_changes = Table(
 
 **Implementation Steps**:
 1. Query schedules where scheduled_time = now + 24 hours
-2. Send notification to trail-crew members
+2. Send notification to trailsystem-crew members
 3. Include cancellation link
 4. Mark reminder as sent (add reminder_sent boolean to schema)
 
@@ -3169,7 +3169,7 @@ care_report_type_tags = Table(
 
 **Testing**:
 - Create report as regular user (default P3 priority)
-- Create private report as trail-crew
+- Create private report as trailsystem-crew
 - Assign report to crew member
 - Update status through workflow (Open → In Progress → Resolved → Closed)
 - Add comment with photo
@@ -3832,12 +3832,12 @@ subscriptions = Table(
 **Tech Stack**: webui/ project — React 19 + TypeScript + Vite 6.x + Tailwind CSS 4.x + shadcn/ui + Tremor (charts) + Lucide React (icons) + Zustand 5.x + React Query 5.x. Feature-based organization with lazy-loaded routes.
 
 **8 User Roles**:
-1. traillenshq-admin (platform super admin)
+1. super-admin (platform super admin)
 2. admin (site administrator)
 3. org-admin (organization administrator)
-4. trail-owner (trail management permissions)
-5. trail-crew (trail maintenance permissions)
-6. trail-status (trail status update only)
+4. trailsystem-owner (trail management permissions)
+5. trailsystem-crew (trail maintenance permissions)
+6. trailsystem-status (trail status update only)
 7. content-moderator (content moderation)
 8. org-member (basic organization member)
 
@@ -4344,7 +4344,7 @@ subscriptions = Table(
 - Full condition update (reason, photos, tags)
 - Schedule future condition changes
 - Manage condition types for organization
-- Admin role validation gate (requires `trail-admin`, `trail-owner`, or `admin` Cognito group)
+- Admin role validation gate (requires `trail-admin`, `trailsystem-owner`, or `admin` Cognito group)
 
 **Implementation Steps**:
 1. Create admin-specific Compose screens
@@ -4408,7 +4408,7 @@ subscriptions = Table(
 **UI Features**:
 - List organization members with roles
 - Invite new users
-- Change user roles (org-admin, trail-crew, trail-owner, etc.)
+- Change user roles (org-admin, trailsystem-crew, trailsystem-owner, etc.)
 - Remove users from organization
 - View user activity
 
@@ -4722,7 +4722,7 @@ subscriptions = Table(
 5. Set initial status (Open)
 6. Create default status tags and care report type tags
 7. Invite 3-5 trail crew members
-8. Assign roles (org-admin, trail-crew)
+8. Assign roles (org-admin, trailsystem-crew)
 
 **Acceptance Criteria**:
 - Hydrocut org created
@@ -5871,7 +5871,7 @@ Several phases can run in parallel to optimize timeline:
 4. **Phase 11 (Web Dashboards) - 10-14 days**
    - **Risk**: 8 role-specific dashboards require extensive UI work
    - **Mitigation**: Reuse dashboard components, implement highest-priority roles first
-   - **Contingency**: Launch with 4 core roles (superadmin, org-admin, trail-owner, trail-crew), add others post-MVP
+   - **Contingency**: Launch with 4 core roles (superadmin, org-admin, trailsystem-owner, trailsystem-crew), add others post-MVP
 
 ### Optimized Timeline Strategy
 
@@ -6104,7 +6104,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - [ ] Incident Response Plan documented and team trained
 - [ ] API rate limiting enabled (100 req/min/user, 1000 req/min/org)
 - [ ] AWS WAF deployed (Security Hub and GuardDuty moved to post-MVP due to costs)
-- [ ] MFA enforcement for org-admin, trail-owner, superadmin roles (7-day grace period)
+- [ ] MFA enforcement for org-admin, trailsystem-owner, superadmin roles (7-day grace period)
 
 #### **3. Authentication System (Phase 3)**
 - [ ] Passkey authentication working (WebAuthn/FIDO2, Touch ID, Face ID, security keys)
@@ -6257,7 +6257,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 ### Documentation Requirements
 
 - **User Documentation**: Complete user guides for all 8 roles
-- **Admin Documentation**: Complete admin guides for org-admin, trail-owner
+- **Admin Documentation**: Complete admin guides for org-admin, trailsystem-owner
 - **API Documentation**: Complete API reference with examples
 - **Developer Documentation**: Complete setup guides, architecture docs
 - **Training Materials**: Video tutorials, FAQs, troubleshooting guides

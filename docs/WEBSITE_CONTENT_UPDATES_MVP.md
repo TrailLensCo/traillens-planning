@@ -595,9 +595,9 @@ const mockFeatures = [
     benefits: [
       'superadmin: Platform super admin',
       'org-admin: Organization administrator',
-      'trail-owner: Manage specific trails',
-      'trail-crew: Update status and submit work logs',
-      'trail-status: Read-only status access',
+      'trailsystem-owner: Manage specific trails',
+      'trailsystem-crew: Update status and submit work logs',
+      'trailsystem-status: Read-only status access',
       'trail-subscriber: Notification subscriptions',
       'trail-reporter: Submit public care reports',
       'trail-viewer: Read-only public trail access'
@@ -992,7 +992,7 @@ const benefits = [
   {
     icon: "fas fa-users-cog",
     title: "Eight User Roles",
-    description: "Fine-grained access control with superadmin, org-admin, trail-owner, trail-crew, and four additional roles for different permission levels."
+    description: "Fine-grained access control with superadmin, org-admin, trailsystem-owner, trailsystem-crew, and four additional roles for different permission levels."
   },
   {
     icon: "fas fa-shield-alt",

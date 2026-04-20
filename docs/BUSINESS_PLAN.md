@@ -2140,12 +2140,12 @@ Trail organizations don't need "software"—they need a **complete operating sys
 
 | Role | Permissions | Use Case |
 |------|-------------|----------|
-| **traillenshq-admin** | Platform super admin, all organizations | TrailLensHQ staff only |
+| **super-admin** | Platform super admin, all organizations | TrailLensHQ staff only |
 | **admin** | Site administrator, all features | TrailLensHQ operations |
 | **org-admin** | Full organization control, invite users, manage billing | Organization president/director |
-| **trail-owner** | Manage specific assigned trails, create reports, update status | Trail system managers |
-| **trail-crew** | Update trail status, manage Trail Care Reports, submit work logs | Volunteer trail crew members |
-| **trail-status** | Update trail status only (no report management) | Limited crew members, seasonal staff |
+| **trailsystem-owner** | Manage specific assigned trails, create reports, update status | Trail system managers |
+| **trailsystem-crew** | Update trail status, manage Trail Care Reports, submit work logs | Volunteer trail crew members |
+| **trailsystem-status** | Update trail status only (no report management) | Limited crew members, seasonal staff |
 | **content-moderator** | Moderate user-generated content (reviews, forums, photos) | Volunteer moderators |
 | **org-member** | Basic organization member access, view private content | Dues-paying members |
 
@@ -2156,7 +2156,7 @@ Trail organizations don't need "software"—they need a **complete operating sys
 - **Bulk Invites**: CSV upload to invite 50 crew members at once
 
 **Multi-Organization Support:**
-- **Users Can Belong to Multiple Organizations**: Trail crew member at 2 organizations, org-admin at one, trail-crew at another
+- **Users Can Belong to Multiple Organizations**: Trail crew member at 2 organizations, org-admin at one, trailsystem-crew at another
 - **Role Per Organization**: Different permissions in each organization
 - **Unified Dashboard**: Single view of all trails across all organizations user belongs to
 
@@ -2557,7 +2557,7 @@ Logs success/failure → Crew receives confirmation
 - Send test post to verify connection
 
 **Step 4: Invite Users (5 minutes)**
-- Invite trail crew members (assign trail-crew role)
+- Invite trail crew members (assign trailsystem-crew role)
 - Invite volunteers (assign org-member role)
 - Share public link for hikers/bikers to subscribe
 
@@ -5017,7 +5017,7 @@ For free tier sign-ups, fully automated onboarding:
 
 **Step 3: Invite Team Members (Optional)**
 - Add trail crew members via email invitation
-- Assign roles: org-admin, trail-owner, trail-crew
+- Assign roles: org-admin, trailsystem-owner, trailsystem-crew
 - Each member receives invitation email with signup link
 
 **Pro Tier Onboarding (Sales-Assisted):**
@@ -5164,7 +5164,7 @@ TrailLensHQ implements multiple layers of security controls:
 - Account lockout: 5 failed attempts = 1-hour lockout
 
 **Multi-Factor Authentication (MFA):**
-- **Required roles**: org-admin, trail-owner, traillenshq-admin (7-day grace period from first login)
+- **Required roles**: org-admin, trailsystem-owner, super-admin (7-day grace period from first login)
 - **MFA methods**: SMS codes, TOTP (Authenticator app)
 - **Passkey users**: Exempt from additional MFA (passkeys are inherently multi-factor)
 
@@ -5174,12 +5174,12 @@ TrailLensHQ implements multiple layers of security controls:
 
 | Role | User Count (Year 1) | PII Access Level | Permissions |
 |------|-------------------|------------------|-------------|
-| **traillenshq-admin** | 2-3 | Full (all organizations) | Platform administration, all tables, all organizations |
+| **super-admin** | 2-3 | Full (all organizations) | Platform administration, all tables, all organizations |
 | **admin** | 5-10 | Full site access | Content moderation, user management |
 | **org-admin** | 50-100 | Organization PII only | Organization settings, member management, billing |
-| **trail-owner** | 200-500 | Limited (trail crew names) | Trail system CRUD, status updates, care reports |
-| **trail-crew** | 500-1,000 | Minimal (own profile) | Trail status updates, work logs, own profile |
-| **trail-status** | 100-200 | None | Trail status updates only (no user data access) |
+| **trailsystem-owner** | 200-500 | Limited (trail crew names) | Trail system CRUD, status updates, care reports |
+| **trailsystem-crew** | 500-1,000 | Minimal (own profile) | Trail status updates, work logs, own profile |
+| **trailsystem-status** | 100-200 | None | Trail status updates only (no user data access) |
 | **content-moderator** | 10-20 | User-generated content | Forum moderation, review moderation |
 | **org-member** | 8,000+ | Own data only | Personal profile, subscriptions, notifications |
 

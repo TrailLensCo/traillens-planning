@@ -231,12 +231,12 @@ TrailLensHQ implements **defense-in-depth** access controls with multiple layers
 
 | Role | User Count | PII Access Level | Can Access |
 |------|-----------|------------------|------------|
-| **traillenshq-admin** | 2-3 | **FULL ACCESS** | All user data, all tables, all organizations |
+| **super-admin** | 2-3 | **FULL ACCESS** | All user data, all tables, all organizations |
 | **admin** | 5-10 | **FULL SITE ACCESS** | All public data, moderate content |
 | **org-admin** | 50-100 | **ORGANIZATION PII** | Users in their organization, member emails, RSVPs |
-| **trail-owner** | 200-500 | **LIMITED PII** | Trail maintainer names, work logs |
-| **trail-crew** | 500-1000 | **MINIMAL PII** | Own profile, status updates |
-| **trail-status** | 100-200 | **NO PII** | Trail status only, no user data |
+| **trailsystem-owner** | 200-500 | **LIMITED PII** | Trail maintainer names, work logs |
+| **trailsystem-crew** | 500-1000 | **MINIMAL PII** | Own profile, status updates |
+| **trailsystem-status** | 100-200 | **NO PII** | Trail status only, no user data |
 | **content-moderator** | 10-20 | **USER-GENERATED CONTENT** | Forum posts, reviews, photos (includes usernames) |
 | **org-member** | 8,000+ | **OWN DATA ONLY** | Personal profile, own RSVPs, own subscriptions |
 
@@ -351,7 +351,7 @@ TrailLensHQ implements **defense-in-depth** access controls with multiple layers
 | Access Category | Number of People/Systems | PII Access Level | Controls |
 |-----------------|-------------------------|------------------|----------|
 | AWS Admins | 2-3 | FULL | MFA, IAM policies, CloudTrail (not enabled) |
-| Platform Admins (traillenshq-admin) | 2-3 | FULL | JWT auth, audit logs |
+| Platform Admins (super-admin) | 2-3 | FULL | JWT auth, audit logs |
 | Organization Admins | 50-100 | Organization PII | Tenant isolation, RBAC |
 | Trail Owners/Crew | 500-1500 | Limited | RBAC, minimal access |
 | Regular Users | 8,000+ | Own data only | JWT auth, tenant isolation |
@@ -379,10 +379,10 @@ TrailLensHQ implements **defense-in-depth** access controls with multiple layers
   - **Passkey Authentication**: WebAuthn/FIDO2 biometric login (Touch ID, Face ID, security keys)
   - **Magic Link**: Email-based passwordless login (15-minute expiration link)
   - **Email/Password**: Traditional authentication with strong password policy (12+ chars, mixed case, numbers, symbols, 6-password history)
-- **MFA Enforcement**: Required for org-admin, trail-owner, superadmin roles with 7-day grace period from first login
+- **MFA Enforcement**: Required for org-admin, trailsystem-owner, superadmin roles with 7-day grace period from first login
 - **Email verification required** before account activation
 - **JWT token-based authentication** with RS256 signature verification
-- **8 user groups** with granular permissions (traillenshq-admin → org-member)
+- **8 user groups** with granular permissions (super-admin → org-member)
 - **Multi-organization support** with tenant isolation
 
 #### ✅ Encryption
@@ -928,7 +928,7 @@ By 2026, cyber insurance has shifted from "nice-to-have backup plan" to "compani
 **Core Controls Insurers Demand:**
 1. **Multi-Factor Authentication (MFA)**
    - **TrailLens Status:** ✅ Cognito supports MFA, but not enforced
-   - **Action:** Enforce MFA for admin roles (traillenshq-admin, org-admin)
+   - **Action:** Enforce MFA for admin roles (super-admin, org-admin)
 
 2. **Zero-Trust Access**
    - **TrailLens Status:** ⚠️ Partial - VPC private subnets, but no device trust verification
@@ -1722,7 +1722,7 @@ aws.cloudtrail.Trail(
 ---
 
 #### **5. Enforce MFA for Admin Roles (1 Day)**
-- **Action:** Configure Cognito to require MFA for traillenshq-admin and org-admin groups
+- **Action:** Configure Cognito to require MFA for super-admin and org-admin groups
 - **Purpose:** Prevent credential stuffing, phishing attacks
 - **Priority:** **HIGH** - Cyber insurance requirement
 

@@ -1012,7 +1012,7 @@ All tasks in Section B are about **WRITING CONTENT** into the `docs/MVP_PROJECT_
 - [ ] **Required Documentation Content:**
   - **Task ID:** 2.7
   - **Task Name:** Implement MFA Enforcement with 7-Day Grace Period
-  - **Objective:** Require MFA for org-admin, trail-owner, and superadmin roles
+  - **Objective:** Require MFA for org-admin, trailsystem-owner, and superadmin roles
   - **Files to Document (that future developers will modify/create):**
     - `infra/cognito.ts` (update Cognito User Pool configuration)
     - `api-dynamo/middleware/mfa-enforcement.ts` (new file to create)
@@ -1020,7 +1020,7 @@ All tasks in Section B are about **WRITING CONTENT** into the `docs/MVP_PROJECT_
   - **Implementation Steps to Document:**
     1. Enable MFA in Cognito User Pool:
        - Optional MFA for all users (SMS or TOTP)
-       - Require MFA for org-admin, trail-owner, superadmin groups
+       - Require MFA for org-admin, trailsystem-owner, superadmin groups
     2. Implement 7-day grace period logic:
        - Track user first login date
        - Allow 7 days from first login before enforcing MFA
@@ -1032,7 +1032,7 @@ All tasks in Section B are about **WRITING CONTENT** into the `docs/MVP_PROJECT_
        - SMS option (backup method)
        - Verification step (user must enter code to confirm)
     4. Update login flow:
-       - Check if user is admin role (org-admin, trail-owner, superadmin)
+       - Check if user is admin role (org-admin, trailsystem-owner, superadmin)
        - Check if MFA enabled for user
        - If not enabled, check grace period
        - If grace period expired, redirect to MFA setup
@@ -1618,7 +1618,7 @@ All tasks in Section B are about **WRITING CONTENT** into the `docs/MVP_PROJECT_
   - Phase overview
   - **Document Task 11.1:** Create role-specific dashboard layouts (all 8 roles)
   - **Document Task 11.2:** Implement trail system CRUD UI for org-admin
-  - **Document Task 11.3:** Implement care report management UI for trail-crew
+  - **Document Task 11.3:** Implement care report management UI for trailsystem-crew
   - **Document Task 11.4:** Implement analytics dashboards
   - **Document Task 11.5:** Implement bulk operations UI
   - **Document Task 11.6:** Implement tag management UI

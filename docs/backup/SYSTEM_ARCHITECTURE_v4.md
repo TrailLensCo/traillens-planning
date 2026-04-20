@@ -71,7 +71,7 @@ The diagram above shows the complete system architecture including all client ap
 
 - **Platform:** Apple App Store (TestFlight for MVP beta)
 - **Purpose:** Trail system management and Trail Care Report handling for trail crew
-- **Authentication:** AWS Cognito SDK with role verification (trail-crew+ only)
+- **Authentication:** AWS Cognito SDK with role verification (trailsystem-crew+ only)
 - **Key Features:**
   - Quick trail system status updates from field
   - Full Trail Care Report CRUD (view, create, edit, assign, comment, close)
@@ -167,12 +167,12 @@ The diagram above shows the complete system architecture including all client ap
   - Requires: uppercase, lowercase, numbers, symbols
   - Password history: 6 (prevent reuse of last 6 passwords)
 - **User Groups (8 roles):**
-  - `traillenshq-admin`: Platform super admin
+  - `super-admin`: Platform super admin
   - `admin`: Site administrator
   - `org-admin`: Organization administrator
-  - `trail-owner`: Trail management permissions
-  - `trail-crew`: Trail maintenance permissions
-  - `trail-status`: Trail status update only
+  - `trailsystem-owner`: Trail management permissions
+  - `trailsystem-crew`: Trail maintenance permissions
+  - `trailsystem-status`: Trail status update only
   - `content-moderator`: Content moderation
   - `org-member`: Basic organization member
 - **Email Integration:** Uses Amazon SES for sending (no 50/day limit)
@@ -286,7 +286,7 @@ The diagram above shows the complete system architecture including all client ap
 #### **Amazon SNS (Simple Notification Service)**
 - **Purpose:** Push notification delivery to mobile devices
 - **Topics:**
-  - `trail-status`: Trail status change notifications
+  - `trailsystem-status`: Trail status change notifications
 - **Platform Applications:**
   - APNS (iOS): Requires Apple Push Notification certificate
   - FCM (Android): Requires Firebase Cloud Messaging API key
@@ -435,7 +435,7 @@ The diagram above shows the complete system architecture including all client ap
 2. App sends authenticated request to API Gateway
 3. API Gateway validates JWT with Cognito
 4. Main API Lambda executes:
-   - Validates user has `trail-owner`, `trail-crew`, or `admin` group
+   - Validates user has `trailsystem-owner`, `trailsystem-crew`, or `admin` group
    - Updates trail status in DynamoDB trails table
    - Writes history entry to trail_history table
    - Triggers SNS notification to subscribed users
@@ -494,7 +494,7 @@ The diagram above shows the complete system architecture including all client ap
     - Email/Password: 12+ character minimum with complexity requirements
 - **Authorization:** Role-based access control (8 Cognito groups)
 - **Token Expiration:** Access tokens expire after 1 hour, refresh tokens after 30 days
-- **MFA Enforcement:** Required for org-admin, trail-owner, superadmin roles (7-day grace period)
+- **MFA Enforcement:** Required for org-admin, trailsystem-owner, superadmin roles (7-day grace period)
 - **Password Policy:** 12+ chars, mixed case, numbers, symbols, 6-password history
 
 ### 2. Data Encryption
