@@ -401,7 +401,7 @@ Implement three required authentication methods: passkey (WebAuthn), magic link,
   - Email verification required before account activation
   - MFA configuration:
     - Optional MFA for regular users
-    - Required MFA for admin roles (traillenshq-admin, org-admin, content-moderator)
+    - Required MFA for admin roles (super-admin, org-admin, content-moderator)
     - 7-day grace period for admins to enable MFA (warning banner)
     - TOTP via authenticator apps (Google Authenticator, Authy, 1Password)
     - SMS MFA as backup (via SNS)
@@ -701,9 +701,9 @@ Implement trail system data model (NOT individual trails), CRUD operations, and 
   - `PUT /api/trail-systems/:id` - Update trail system
   - `DELETE /api/trail-systems/:id` - Delete trail system (soft delete)
 - Authorization:
-  - Create: Requires `org-admin` or `trail-owner` role
+  - Create: Requires `org-admin` or `trailsystem-owner` role
   - Read: Public trail systems visible to all, private visible to org members only
-  - Update: Requires `org-admin` or `trail-owner` role
+  - Update: Requires `org-admin` or `trailsystem-owner` role
   - Delete: Requires `org-admin` role only
 - Input validation:
   - Name: Required, 3-100 characters
@@ -835,8 +835,8 @@ Implement flexible tag system for organizing trail system statuses (max 10 tags 
   - `POST /api/trail-systems/:id/status/tags` - Assign tags to current status
   - `DELETE /api/trail-systems/:id/status/tags/:tag_id` - Remove tag from status
 - Authorization:
-  - Create/Update/Delete tags: Requires `trail-status` role or higher
-  - Assign/Remove tags from statuses: Requires `trail-status` role or higher
+  - Create/Update/Delete tags: Requires `trailsystem-status` role or higher
+  - Assign/Remove tags from statuses: Requires `trailsystem-status` role or higher
 - Validation:
   - Enforce 10-tag limit per organization
   - Prevent duplicate tag names within organization
@@ -1095,7 +1095,7 @@ Implement pre-scheduled status changes with automated cron job execution and rem
   - `DELETE /api/trail-systems/:id/scheduled-changes/:schedule_id` - Cancel schedule
 - Validation:
   - scheduled_timestamp must be in future
-  - User must have trail-status+ permission
+  - User must have trailsystem-status+ permission
   - Cannot schedule in past
 - UI:
   - Calendar view showing all scheduled changes

@@ -393,7 +393,7 @@ Based on:
 - **Single unified system** replacing separate "work logs" and "problem reports"
 - **Visibility control** via `is_public` boolean flag (not tags)
   - `is_public = true`: Viewable by all users including regular users (community reports)
-  - `is_public = false`: Viewable only by trail-crew and above (internal work logs)
+  - `is_public = false`: Viewable only by trailsystem-crew and above (internal work logs)
 - **Flexible categorization** via type tags
 - **Assignment and workflow** for crew task management
 
@@ -435,15 +435,15 @@ Based on:
 - Multiple type tags can be applied to categorize the report
 - Examples: "maintenance", "hazard", "tree-down", "erosion", "observation", "winter", "urgent", "signage"
 - Maximum 15 type tags per organization
-- Created/managed by trail-crew and above
+- Created/managed by trailsystem-crew and above
 - Used for filtering and sorting reports in interfaces
 
 **Assignment (Optional):**
 
 - **Unassigned** - Default state, any crew member can self-assign
-- **Assigned to specific crew member** - Org-admin or trail-owner can assign to individual
+- **Assigned to specific crew member** - Org-admin or trailsystem-owner can assign to individual
 - **Crew member self-assignment** - Any crew member can claim an unassigned report
-- **Reassignment** - Org-admin, trail-owner, or current assignee can reassign
+- **Reassignment** - Org-admin, trailsystem-owner, or current assignee can reassign
 
 **Calculated Fields:**
 
@@ -454,7 +454,7 @@ Based on:
 **Optional Fields:**
 
 - **Location** - GPS coordinates (auto-captured from mobile app or manually entered)
-- **Estimated resolution time** - How long crew thinks this will take (trail-crew+ only)
+- **Estimated resolution time** - How long crew thinks this will take (trailsystem-crew+ only)
 
 #### 2.3 Report Status Workflow
 
@@ -470,7 +470,7 @@ Based on:
 **Status Workflow Rules:**
 
 - Any status can transition to any other status (flexible workflow)
-- Closing a report requires **resolution notes** (required field, trail-crew+ only)
+- Closing a report requires **resolution notes** (required field, trailsystem-crew+ only)
 - Cancelled reports require **cancellation reason** (required field)
 - Days open counter shows that day the report is any report is anything other than closed or cancelled. Once closed or cancelled, the count stops.
 
@@ -503,7 +503,7 @@ Based on:
   - Tag additions/removals
   - Resolution notes
 - Each log entry includes: what changed, who made the change, timestamp
-- Full history visible to trail-crew and above
+- Full history visible to trailsystem-crew and above
 
 #### 2.5 Submission and Permissions
 
@@ -515,7 +515,7 @@ Based on:
 **Who Can View:**
 
 - **Public reports** (`is_public = true`) - Visible to all users
-- **Private reports** (`is_public = false`) - Visible only to trail-crew and above for that organization
+- **Private reports** (`is_public = false`) - Visible only to trailsystem-crew and above for that organization
 
 **Who Can Edit:**
 
@@ -706,9 +706,9 @@ Trail care reports follow a status-based retention policy that balances historic
 - **superadmin** - Platform super admin (TrailLens staff)
 - **admin** - Site administrator
 - **org-admin** - Organization administrator (full org control)
-- **trail-owner** - Can manage specific trails
-- **trail-crew** - Can update trail status and submit work logs
-- **trail-status** - Can only update trail status (limited crew)
+- **trailsystem-owner** - Can manage specific trails
+- **trailsystem-crew** - Can update trail status and submit work logs
+- **trailsystem-status** - Can only update trail status (limited crew)
 - **content-moderator** - Moderate user-generated content
 - **org-member** - Basic organization member access
 
@@ -743,7 +743,7 @@ Trail care reports follow a status-based retention policy that balances historic
 - **Why:** Compatibility for older systems/browsers
 - **Implementation:**
   - AWS Cognito User Pool with strong password policy
-  - MFA required for org-admin, trail-owner, and superadmin roles
+  - MFA required for org-admin, trailsystem-owner, and superadmin roles
   - Password rotation encouraged (not enforced for MVP)
 - **Status:** REQUIRED FOR MVP ✅
 
@@ -771,7 +771,7 @@ Trail care reports follow a status-based retention policy that balances historic
   - Update profile and contact methods
   - Manage notification preferences
 
-- **For trail-crew:**
+- **For trailsystem-crew:**
   - All user features PLUS:
   - Quick status update interface for trail systems they manage
   - View trail systems they manage
@@ -779,7 +779,7 @@ Trail care reports follow a status-based retention policy that balances historic
   - View status history for their trail systems
 
 - **For org-admin:**
-  - All trail-crew features PLUS:
+  - All trailsystem-crew features PLUS:
   - Manage organization members
   - Invite new users
   - Create/edit/delete trail systems for their organization
@@ -993,7 +993,7 @@ Trail care reports follow a status-based retention policy that balances historic
 - **Data retention policy:** Delete inactive user data after 2 years (REQUIRED FOR MVP ✅)
 - **User data export API:** Endpoint for users to download their data (GDPR Article 20) (REQUIRED FOR MVP ✅)
 - **User data deletion API:** Endpoint for users to delete their account (GDPR Article 17) (REQUIRED FOR MVP ✅)
-- **MFA for admin accounts:** Required for org-admin, trail-owner, and superadmin roles (REQUIRED FOR MVP ✅)
+- **MFA for admin accounts:** Required for org-admin, trailsystem-owner, and superadmin roles (REQUIRED FOR MVP ✅)
 
 #### 6.3 Compliance Documentation (Legal Review Required)
 
@@ -1066,7 +1066,7 @@ Trail care reports follow a status-based retention policy that balances historic
     - **Close/cancel reports** - Add resolution notes when completing work
     - **Assign reports** - Assign to specific crew members or self-assign
     - **Dashboard views:**
-      - Assigned to Me (for trail-crew)
+      - Assigned to Me (for trailsystem-crew)
       - Unassigned Pool (for self-assignment)
       - All Open Reports (org-wide view for admins)
       - Filter by priority, status, type tags, trail system, days open
@@ -1209,7 +1209,7 @@ Trail care reports follow a status-based retention policy that balances historic
 - ✅ **Deploy AWS WAF** - Block OWASP Top 10 exploits (REQUIRED)
 - ✅ **Rotate secrets and remove placeholders** - Eliminate hardcoded secrets (REQUIRED)
 - ✅ **Enable Security Hub and GuardDuty** - Threat detection and compliance monitoring (REQUIRED)
-- ✅ **Enable MFA for admin accounts** - Required for org-admin, trail-owner, superadmin (REQUIRED)
+- ✅ **Enable MFA for admin accounts** - Required for org-admin, trailsystem-owner, superadmin (REQUIRED)
 - ✅ **Implement data retention policy** - Auto-delete inactive users after 2 years (REQUIRED)
 - ✅ **Implement user data export feature** - GDPR Article 20 right to data portability via dashboard UI (REQUIRED)
 - ✅ **Implement account deletion feature** - GDPR Article 17 right to be forgotten via user settings (REQUIRED)
@@ -1345,13 +1345,13 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
 
 **Status Tags Management:**
 
-- **Who can manage**: trail-status role and above (trail-status, trail-crew, trail-owner, org-admin, superadmin)
+- **Who can manage**: trailsystem-status role and above (trailsystem-status, trailsystem-crew, trailsystem-owner, org-admin, superadmin)
 - **Operations**: Create, rename, delete tags; assign tags to status types
 - **Limit**: Maximum 10 tags per organization
 
 **Care Report Type Tags Management:**
 
-- **Who can manage**: trail-owner and above ONLY (trail-owner, org-admin, superadmin)
+- **Who can manage**: trailsystem-owner and above ONLY (trailsystem-owner, org-admin, superadmin)
 - **Operations**: Create, rename, delete type tags
 - **Who can assign**: Anyone submitting a report can assign existing type tags
 - **Limit**: Maximum 25 type tags per organization
@@ -1380,7 +1380,7 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
 
 **MFA Enforcement:**
 
-- **Timing**: 7-day grace period after first login for admin roles (org-admin, trail-owner, superadmin)
+- **Timing**: 7-day grace period after first login for admin roles (org-admin, trailsystem-owner, superadmin)
 - **Reminders**: Daily email reminders during grace period
 - **Enforcement**: After 7 days, account access restricted until MFA enabled
 - **Rationale**: Allows admin exploration without friction while maintaining security
@@ -1538,7 +1538,7 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
    - **Phase 3:** Authentication system (passkey via Cognito or WebAuthn, magic link, email/password - ALL THREE required)
    - **Phase 4:** PII protection (data retention policies, user data export feature, account deletion feature, MFA enforcement for admins with 7-day grace period)
    - **Phase 5:** Trail system data model (trail systems table, attributes, relationships to organizations, cover photos, metadata)
-   - **Phase 6:** Tag-based status organization (status tags max 10 per org, CRUD operations, sticky filtering, permissions: trail-status+)
+   - **Phase 6:** Tag-based status organization (status tags max 10 per org, CRUD operations, sticky filtering, permissions: trailsystem-status+)
    - **Phase 7:** Status management (status types max 30 per org, status updates with photos, two-level photo system, seasons, history with 2-year retention, bulk updates, templates)
    - **Phase 8:** Scheduled status changes (separate scheduled_status_changes table, cron job automation, reminder notifications before changes)
    - **Phase 9:** Trail Care Reports system (P1-P5 priority, public/private visibility flag, type tags max 25 per org, assignment workflow, comments, activity log, multiple photos up to 5, status-based retention, integration with trail system status)
@@ -1614,7 +1614,7 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
 | 1.4 | 2026-01-16 | CTO + Claude Code | MAJOR ARCHITECTURAL CHANGE: Replaced fixed Status Type Groups (sections 1.2-1.3) with flexible tag-based system. Tags are per-organization, max 10 per org, multiple tags per status, managed by anyone with status access. Includes sticky tag filtering for change status interface. Enables custom organizational schemes vs. rigid 5-group structure. |
 | 1.5 | 2026-01-16 | CTO + Claude Code | NEW FEATURE: Added comprehensive Trail Care Reports system (Section 2) - unified issue tracking replacing work logs and problem reports. Features: P1-P5 priority, public/private visibility flag, type tags (max 25 per org, org-admin only), flexible assignment, comments, activity log, multiple photos (up to 5), optional submitter notifications. Renumbered sections 3-7 (was 2-6). |
 | 1.6 | 2026-01-16 | CTO + Claude Code | TRAIL CARE REPORTS ENHANCEMENT: Added retention policy (Section 2.10) - status-based retention with open/in-progress/deferred/resolved reports kept indefinitely, closed/cancelled deleted after 2 years, photos deleted 180 days after closure. Updated iPhone apps (Section 7) with full care report support: User app can view/submit reports with camera integration, Admin app has full CRUD, comments, assignment, and quick work log creation. Updated user stories with trail care report workflows. |
-| 1.7 | 2026-01-16 | CTO + Claude Code | AMBIGUITY RESOLUTION: Added comprehensive "MVP Implementation Clarifications" section documenting 16 CTO decisions via AskUserQuestion tool. Clarified: Status model (types vs updates vs tags), permission model (status tags: trail-status+, care report tags: trail-owner+), security config (CloudTrail 1yr, secrets 180d), MFA timing (7-day grace), passkey implementation (research Cognito first), subscription model (free tier only), bulk updates (same reason/photo), seasonal behavior (no auto-revert), TestFlight rollout (phased), offline mode (7-day cache), data export (JSON+CSV with PII+activity), trail system management (rename+archive), care report editing (24hr window), days open counter (submission to close). Fixed line 740: traillens-admin \u2192 superadmin. |
+| 1.7 | 2026-01-16 | CTO + Claude Code | AMBIGUITY RESOLUTION: Added comprehensive "MVP Implementation Clarifications" section documenting 16 CTO decisions via AskUserQuestion tool. Clarified: Status model (types vs updates vs tags), permission model (status tags: trailsystem-status+, care report tags: trailsystem-owner+), security config (CloudTrail 1yr, secrets 180d), MFA timing (7-day grace), passkey implementation (research Cognito first), subscription model (free tier only), bulk updates (same reason/photo), seasonal behavior (no auto-revert), TestFlight rollout (phased), offline mode (7-day cache), data export (JSON+CSV with PII+activity), trail system management (rename+archive), care report editing (24hr window), days open counter (submission to close). Fixed line 740: traillens-admin \u2192 superadmin. |
 | 1.8 | 2026-01-16 | CTO + Claude Code | WORDING CLARIFICATION: Updated GDPR requirements (lines 1164-1165) from technical "Create API" language to user-facing feature language. Changed "Create user data export API" to "Implement user data export feature" and "Create user data deletion API" to "Implement account deletion feature" to emphasize UI-accessible features per GDPR requirements, not technical REST endpoints requiring programming knowledge. |
 | 1.9 | 2026-01-17 | CTO + Claude Code | OFFLINE TRAIL CARE REPORTS: Added full offline support for creating trail care reports. Users can now create reports offline with photos (up to 5), stored locally and auto-uploaded when connection restored. Features: pending badge/icon on reports, dedicated "Pending Sync" section, edit/delete pending reports before sync, 7-day queue with warnings after 48 hours, auto-retry with exponential backoff (30s, 2min, 10min) then manual. Updated offline mode clarifications section and iPhone app decision. Report viewing still requires online connection. |
 | 1.10 | 2026-01-17 | CTO + Claude Code | BRAND MESSAGING IN MVP: Moved brand messaging update from post-MVP marketing to required MVP features. Added requirement to update website and marketing materials with "Building communities, one trail at a time" byline. Low-hanging fruit that improves brand consistency from launch. |

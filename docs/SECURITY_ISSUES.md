@@ -13,7 +13,7 @@ regexes, vulnerable and secure code examples, and references to CWE and OWASP cl
 
 | ID | Severity | Category | Description |
 |----|----------|----------|-------------|
-| SEC-AUTH-001 | CRITICAL | Authentication & Session Management | JWT Algorithm Confusion Attack |
+| SEC-AUTH-001 | ~~CRITICAL~~ RESOLVED | Authentication & Session Management | JWT Algorithm Confusion Attack — HS256 removed entirely |
 | SEC-AUTH-002 | CRITICAL | Authentication & Session Management | JWT None Algorithm Bypass |
 | SEC-AUTH-003 | HIGH | Authentication & Session Management | JWT Missing Expiration Validation |
 | SEC-AUTH-004 | CRITICAL | Authentication & Session Management | JWT Secret in Source Code |
@@ -106,45 +106,28 @@ regexes, vulnerable and secure code examples, and references to CWE and OWASP cl
 
 ## Category 1: Authentication & Session Management
 
-### SEC-AUTH-001: JWT Algorithm Confusion Attack
+### SEC-AUTH-001: JWT Algorithm Confusion Attack ✅ RESOLVED
 
-- **Severity:** CRITICAL
+- **Severity:** ~~CRITICAL~~ **RESOLVED**
+- **Status:** **FIXED** — HS256 support completely removed from codebase (commit: removed custom passkey/HS256 backend, topic/api-cleanup)
 - **Category:** Authentication & Session Management
 - **Description:** Attacker changes the `alg` header from RS256 to HS256, causing the server to use the public RSA key as an HMAC secret. Since the public key is publicly available, the attacker can forge valid tokens.
-- **Detection Regex:** `jwt\.decode\((?!.*algorithms)` or `algorithms\s*=\s*\[.*HS256.*RS256`
-- **Impact:** Complete authentication bypass. Attacker can forge tokens for any user.
+- **Resolution:** The entire custom passkey HS256 authentication path (`_PASSKEY_ISSUER`, `_verify_passkey_token()`, HS256 fallback in `get_current_user()`) was deleted. The `jwt_verifier.py` now accepts ONLY RS256 tokens from Cognito JWKS. There is no code path that accepts HS256 tokens.
 - **CWE:** CWE-327 (Use of a Broken or Risky Cryptographic Algorithm)
 - **OWASP:** A07:2021 - Identification and Authentication Failures
 
-**Vulnerable Pattern:**
+**Resolved Implementation (current codebase):**
 
 ```python
-import jwt
-
-async def verify_token(token: str, public_key: str) -> dict:
-    # VULNERABLE: Accepts both HS256 and RS256
-    # Attacker sets alg=HS256 and signs with the public key
-    payload = jwt.decode(
-        token,
-        public_key,
-        algorithms=["HS256", "RS256"],
-    )
-    return payload
-```
-
-**Secure Pattern:**
-
-```python
-import jwt
-
-async def verify_token(token: str, public_key: str) -> dict:
-    # SECURE: Only RS256 accepted - HS256 tokens are rejected
-    payload = jwt.decode(
-        token,
-        public_key,
-        algorithms=["RS256"],
-    )
-    return payload
+# jwt_verifier.py — RS256-only via Cognito JWKS
+# HS256 is structurally impossible: PyJWT[crypto] with algorithms=["RS256"] rejects
+# any token with a different algorithm header before signature verification.
+payload = jwt.decode(
+    token,
+    public_key,           # RSA public key from Cognito JWKS
+    algorithms=["RS256"], # Only RS256 accepted — HS256 rejected at decode time
+    audience=client_id,
+)
 ```
 
 ---

@@ -199,12 +199,12 @@ TrailLensHQ consists of **7 major components** working together:
 
 #### Team & Access Management
 - **8 User Roles**:
-  - `traillenshq-admin` - Platform super admin
+  - `super-admin` - Platform super admin
   - `admin` - Site administrator
   - `org-admin` - Organization administrator (full org control)
-  - `trail-owner` - Can manage specific trails
-  - `trail-crew` - Can update trail status and submit work logs
-  - `trail-status` - Can only update trail status (limited crew)
+  - `trailsystem-owner` - Can manage specific trails
+  - `trailsystem-crew` - Can update trail status and submit work logs
+  - `trailsystem-status` - Can only update trail status (limited crew)
   - `content-moderator` - Moderate user-generated content
   - `org-member` - Basic organization member access
 - **User Invitations**: Email-based invites with automatic Cognito user creation
