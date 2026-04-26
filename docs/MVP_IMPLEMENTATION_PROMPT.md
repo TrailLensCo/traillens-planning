@@ -343,7 +343,7 @@ Based on:
 #### 1.3 Status Attributes
 
 - **Tags** (optional, multiple allowed)
-  - Assigned from organization's tag pool (max 10 tags per organization)
+  - Assigned from organization's tag pool (max 20 tags per organization)
   - Multiple tags can be applied to a single status
   - Used for filtering, sorting, and organizing statuses in interfaces
   - Examples: ["Winter", "Weather-Related"], ["Maintenance", "Temporary"]
@@ -353,11 +353,7 @@ Based on:
   - Stored in S3, optimized for web/mobile display
   - Max 5MB file size
 
-- **Season assignment** (optional)
-  - Fall, Winter, Spring, Summer
-  - Status can be marked as seasonal (e.g., "Closed - Snow" only applies in Winter)
-  - Helps predict future closures
-  - Note: Season is a status attribute, while seasonal tagging is done via tags (e.g., "Winter" tag)
+- ~~**Season assignment** (optional)~~ — **REMOVED per docs-mvp-backend-features pass.** Season state is communicated via org-defined `condition_tags` (e.g. `Winter Closure`, `Spring Mud Season`). No dedicated season entity, no season attribute on the status record. The catalog (Phase 7.5) can include season-themed entries that admins apply when seasons change.
 
 - **Status metadata**
   - Timestamp (when status was set)
@@ -1634,7 +1630,7 @@ Long-term features:
 ✅ **PII protection** (data retention, export API, deletion API, MFA for admins)
 ✅ **Pilot onboarding** (Hydrocut with 1 trail system, GORBA with 2 trail systems)
 ✅ **All 8 user roles** (as designed in current codebase)
-✅ **Tag-based status organization** (flexible per-organization tags, max 10 status tags, max 15 care report type tags)
+✅ **Tag-based status organization** (flexible per-organization tags, max 20 status tags, max 15 care report type tags)
 
 ### What's Out of Scope for MVP
 
@@ -1807,7 +1803,7 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
 
 - **Who can manage**: trailsystem-status role and above (trailsystem-status, trailsystem-crew, trailsystem-owner, org-admin, superadmin)
 - **Operations**: Create, rename, delete tags; assign tags to status types
-- **Limit**: Maximum 10 tags per organization
+- **Limit**: Maximum 20 tags per organization
 
 **Care Report Type Tags Management:**
 
@@ -1822,6 +1818,109 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
 - **Within 24 hours**: Submitters can edit title, description, and photos
 - **After 24 hours**: Submitters lose edit access but can add comments to their own reports
 - **Trail crew**: Can always edit all report fields, change status, add comments
+
+### Phase 7.5 Condition Catalog Implementation Guidance
+
+**Tag-reuse rationale:** The Condition Catalog reuses the existing `condition_tags` taxonomy (per-org, max 20). No new tag entity is introduced — the catalog references existing `condition_tag_ids` and denormalizes their names for read efficiency (mirrors the existing `condition_observation` pattern). Single source of truth for tag naming and color across catalog entries, observations, and trail-system condition history.
+
+**Optimistic locking:** All catalog `PATCH` operations MUST use a `version` field on the `ConditionCatalogEntry` entity (matches the existing `condition_tag` and `trail_system` pattern). The DynamoDB `UpdateItem` call uses `ConditionExpression: #version = :expected_version` and increments `version` atomically. Concurrent edit collisions surface as `ConditionalCheckFailedException` and are returned to the client as HTTP 409 Conflict so the UI can prompt re-fetch.
+
+**S3 key convention:** Catalog images live at `orgs/{org_id}/catalog/{catalog_id}.jpg` with WebP variants written by the existing `photo_processor` Lambda (mirrors the existing trail-photo flow exactly — no new S3 bucket, no new IAM policies, no new lifecycle rules). The original is at `.jpg`; the processor emits `{catalog_id}-thumb.webp`, `{catalog_id}-medium.webp`, `{catalog_id}-full.webp` in the same prefix.
+
+**Presigned PUT via CloudFront OAC:** `POST /api/organizations/{org_id}/condition-catalog/upload-url` returns a presigned S3 PUT URL using the same CloudFront Origin Access Control pattern already in production for trail-system photos. The client PUTs directly to S3; no bytes traverse the api-dynamo Lambda. Reuses `s3_service.py` helpers verbatim.
+
+**TransactWrite for "apply catalog → trail system + history + usage_count":** The `POST /api/trail-systems/{trail_system_id}/condition/apply-catalog/{catalog_id}` endpoint MUST execute a single DynamoDB `TransactWriteItems` call covering: (a) update the trail-system entity's denormalized `condition_type_id`, `condition_type_name`, `condition_color`, `condition_updated_at` fields; (b) `Put` a new condition-history item under `PK=TRAILSYSTEM#{ts_id}`; (c) `Update` the catalog entry's `usage_count` (`ADD usage_count :one`) and `last_used_at` fields. SNS publish to `TRAIL_CONDITION_CHANGE` happens AFTER the transaction commits. Atomic — either all four mutations succeed or none.
+
+**`save_to_catalog: bool` flag on `PATCH /condition`:** When the existing `PATCH /api/trail-systems/{trail_system_id}/condition` request body carries `save_to_catalog: true` AND no `catalog_entry_id` is referenced, the server creates a new `ConditionCatalogEntry` from the same payload in the same TransactWrite (trail-system condition update + history APPEND + catalog PUT). When `false` or omitted, behavior is unchanged. Backwards-compatible — existing free-form `PATCH /condition` calls work without modification.
+
+**Lambda performance targets:** All catalog routes MUST meet the platform-wide Python Lambda performance contract: P95 latency < 200ms, P99 latency < 500ms (per High-Performance Coding Standards). The catalog list endpoint stays single-partition (GSI1 with `ORG#{org_id}#CATALOG#ACTIVE` partition key) so it serves O(1) regardless of org size up to 100K DAU. Tag-filter intersection happens at the application layer (no per-tag adjacency item in MVP).
+
+**Tag-cap validation (max 20):** The `tags_service.py` validation constant for `condition_tags` MUST enforce 20 server-side. `POST /api/organizations/{org_id}/condition-tags` returns HTTP 400 if the request would push the org's tag count over 20. The check is read-modify-write protected by either an `attribute_not_exists` ConditionExpression or a transactional read of the org's current tag count. Existing tests asserting the prior limit of 10 must be updated.
+
+### Phase 9.6 Care Report `is_public` Field
+
+The care-report request and response schemas in `openapi.json` MUST include `is_public: bool` (default `false`). The `CareReportEntity` in `traillens_db` adds the same field. Visibility-gating rule: when `is_public=true`, any authenticated user (not just org members) can list/get the care report; when `false`, only org members can. `GET /api/care-reports` query semantics: org members see all care reports for the org; non-org-members see only `is_public=true` care reports.
+
+### Phase 9.10 Care Report Photo Cap (max 5)
+
+Add `maxItems: 5` to both the photo upload request schema and the care-report response `photos` array in `openapi.json`. Server-side enforcement: `care_reports_service.py` MUST return HTTP 400 if a `POST /api/care-reports/{care_report_id}/photos` request would push the report's photo count over 5.
+
+### Phase 10.5 Notification Preferences (2-axis matrix)
+
+Notification preferences are a 2-axis matrix: channels (email / SMS / push) × event types. The `NotificationPreferences` schema in `openapi.json` becomes:
+
+```text
+{
+  channels: { email: bool, sms: bool, push: bool },
+  events: {
+    condition_change:                { email, sms, push },
+    care_report_created:             { email, sms, push },
+    care_report_assigned:            { email, sms, push },
+    care_report_comment:             { email, sms, push },
+    scheduled_condition_reminder:    { email, sms, push },
+    observation_received:            { email, sms, push }
+  }
+}
+```
+
+`notifications_service.py` is rewritten to evaluate the per-event-type per-channel matrix at dispatch time.
+
+### Phase 11.4 Analytics Routes (8 new)
+
+Add 8 new analytics routes under a new `analytics` tag. All return pre-aggregated data (never raw rows) backed by daily DynamoDB rollups (`ANALYTICS_ROLLUP#{org_id}#{metric}#{date}`). Routes accept `start_date`, `end_date` query params; bucketed routes accept `bucket=day|week|month`:
+
+1. `GET /api/organizations/{org_id}/analytics/overview` — Org-Admin landing snapshot (`org-admin`+).
+2. `GET /api/organizations/{org_id}/analytics/trail-systems` — status-change frequency, average time per condition, bucketed (`org-admin`+).
+3. `GET /api/organizations/{org_id}/analytics/care-reports` — count by priority/status/type-tag, average resolution time, bucketed (`org-admin`+ for whole org; `trailsystem-crew` may filter).
+4. `GET /api/organizations/{org_id}/analytics/users` — total / 30d-active / subscriptions / notification engagement (`org-admin`+).
+5. `GET /api/organizations/{org_id}/analytics/activity-feed` — paginated org-wide timeline (any authenticated org member; rows filtered by membership).
+6. `GET /api/organizations/{org_id}/analytics/export` — CSV export with `metric=` and date range; returns `text/csv` (`org-admin`+).
+7. `GET /api/trail-systems/{ts_id}/analytics/condition-history` — per-trail-system timeline, bucketed (`trailsystem-owner`+).
+8. `GET /api/trail-systems/{ts_id}/analytics/views` — per-trail-system view counts; depends on view-tracking middleware (`trailsystem-owner`+).
+
+### Subscriptions Endpoints
+
+Three new subscriptions endpoints under the existing `users` tag: `POST /api/users/me/subscriptions`, `GET /api/users/me/subscriptions`, `DELETE /api/users/me/subscriptions/{trailsystem_id}`. Existing `AP-SUB01–AP-SUB03` access patterns (`USER#{user_id}` + `SUBSCRIPTION#{trailsystem_id}`) already match the new route shape.
+
+### Care Report Activity-Log Endpoint
+
+`GET /api/care-reports/{id}/activity` is an aggregate-on-read endpoint: a single `Query(PK=CAREREPORT#{id})` reads the care-report core + comments + assignment-history + status-history items already co-located under that PK; the service merges them into a chronological feed. No new entity, no extra writes. New access pattern AP-CR14.
+
+### URL Renames (Greenfield Breaking Changes)
+
+Three URL renames land in the same `openapi.json` MAJOR version bump (1.1.3 → 2.0.0):
+
+- `/api/devices` → `/api/users/me/devices` (and `/api/devices/{id}` → `/api/users/me/devices/{id}`)
+- `/api/users/phone/verify`, `/api/users/phone/confirm` → `/api/users/me/phone/verify`, `/api/users/me/phone/confirm`
+- `/api/organizations/{org_id}/tags/condition` → `/api/organizations/{org_id}/condition-tags`
+
+Greenfield (zero production users) permits breaking URL changes; both REST client libs (`webui/packages/jsrestapi`, `androidrestapi`) regenerate from `openapi.json` so they pick up new paths automatically.
+
+### Backup Password Authentication (Cognito SRP)
+
+Email + password is a **backup** auth path alongside passkey and magic-link. Wire protocol: Cognito `USER_SRP_AUTH` (Secure Remote Password). Password is never sent in plaintext. **No** account creation via password (Cognito `allow_admin_create_user_only=True` already configured). **No** forgot-password endpoint in `api-dynamo` (deferred to webui Phase 11). Mobile apps (androiduser, androidadmin) expose the username+password login screen **only in DEBUG builds** (`BuildConfig.DEBUG`).
+
+### Background-Worker Lambdas (2 new)
+
+Two new Lambda deployment packages with EventBridge schedules:
+
+- **`scheduled_condition_processor`** (Architecture A) — `cron(0/15 * * * ? *)` every 15 minutes; 256 MB memory; 60s timeout; ARM64. Handles both fire-due-scheduled-conditions and pre-fire reminder dispatch. New DynamoDB GSI4 (`GSI4PK = SCHEDULED#{status}`).
+- **`retention_cleanup_processor`** (Architecture B) — `cron(0 3 * * ? *)` daily at 03:00 UTC; 512 MB memory; 900s timeout; ARM64. Closed care reports (>90d), deleted-account PII scrub (>30d), S3 photo orphan sweep, magic-link belt-and-suspenders. Adds new audit entities: `CareReportDeletionAudit`, `PIIDeletionAudit`.
+
+Pulumi ComponentResource `EventBridgeScheduledLambda` (in `infra/`) provisions the EventBridge rule + target + IAM role + CloudWatch log group (30-day retention) for each. CloudWatch alarms recalibrated for the 15-min interval (1 invocation per 15-min window).
+
+### Cognito Threat Protection Enablement
+
+Upgrade Cognito `user_pool_tier` from `ESSENTIALS` to `PLUS` and add `user_pool_add_ons=aws.cognito.UserPoolUserPoolAddOnsArgs(advanced_security_mode="AUDIT")` initially (then `ENFORCED` after 2-week soak). Caveat: Cognito's compromised-credentials check only runs on `USER_PASSWORD_AUTH`, not on `USER_SRP_AUTH` — adaptive auth (risk scoring) still applies to both. AWS WAF rules on the Cognito endpoint and API Gateway are the correct path for volumetric/brute-force protection (separate infra task).
+
+### Privacy-First TrailPulse Ride Tracking
+
+The backend stores **only** anonymous per-trail-system aggregates — no per-user ride records. Two ride-tracking entities, both co-located under `PK=TRAILSYSTEM#{ts_id}`:
+
+- `TrailSystemRideCount` (anonymous daily aggregate): `SK=RIDECOUNT#{YYYY-MM-DD}`, `total_rides` atomic counter, TTL 3 years (1095 days).
+- `RideCompletion` (anonymous idempotency marker): `SK=RIDECOMPLETION#{ride_id}`, `completed_at` only (no `user_id`), TTL 30 days.
+
+`PUT /api/trailpulse/trail-systems/{trail_system_id}/ride-completion` body `{ ride_id, completed_at }` does a single-partition TransactWrite: (a) `Put RIDECOMPLETION#{ride_id}` with `attribute_not_exists(SK)` for idempotency, (b) `Update RIDECOUNT#{today}` with `ADD total_rides :one`. Per-user "you've ridden here N times" UX is mobile-local Room DB only — backend never sees per-user ride history. Unique-users-per-day, if needed, derives from `FeedbackResponses.user_id` (which IS user-attributed by Task 15.5/15.9 design).
 
 ### Security Implementation Details
 
@@ -1998,7 +2097,7 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
    - **Phase 3:** Authentication system (passkey via Cognito or WebAuthn, magic link, email/password - ALL THREE required)
    - **Phase 4:** PII protection (data retention policies, user data export feature, account deletion feature, MFA enforcement for admins with 7-day grace period)
    - **Phase 5:** Trail system data model (trail systems table, attributes, relationships to organizations, cover photos, metadata)
-   - **Phase 6:** Tag-based status organization (status tags max 10 per org, CRUD operations, sticky filtering, permissions: trailsystem-status+)
+   - **Phase 6:** Tag-based status organization (condition tags max 20 per org, CRUD operations, sticky filtering, permissions: trailsystem-status+)
    - **Phase 7:** Status management (status types max 30 per org, status updates with photos, two-level photo system, seasons, history with 2-year retention, bulk updates, templates)
    - **Phase 8:** Scheduled status changes (separate scheduled_status_changes table, cron job automation, reminder notifications before changes)
    - **Phase 9:** Trail Care Reports system (P1-P5 priority, public/private visibility flag, type tags max 25 per org, assignment workflow, comments, activity log, multiple photos up to 5, status-based retention, integration with trail system status)
@@ -2054,7 +2153,7 @@ The following clarifications were provided by the CTO to resolve ambiguities in 
 - [ ] All MVP security gaps identified (CloudTrail, WAF, secrets rotation, incident response, MFA; Security Hub and GuardDuty moved to post-MVP)
 - [ ] Trail system data model clearly defined (vs individual trails - OUT OF SCOPE)
 - [ ] Trail Care Reports system included (P1-P5 priority, public/private, type tags max 25, assignment, comments, offline creation)
-- [ ] Tag-based status organization included (status tags max 10, care report type tags max 25, separate permission models)
+- [ ] Tag-based status organization included (condition tags max 20, care report type tags max 25, separate permission models)
 - [ ] 3 pilot trail systems identified (Hydrocut trail system with Glasgow and Synders areas, Guelph Lake, Akell)
 - [ ] Subscription model clarified (trail systems + organizations, free tier only for MVP)
 - [ ] iPhone app requirements clearly defined (2 apps: User app with care reports + offline creation, Admin app with full care report CRUD + work logs)
