@@ -300,10 +300,14 @@ The new `scheduled_condition_processor` Lambda (see "Event-Driven Processing" be
 | Care report | `CAREREPORT#{id}` | `METADATA` |
 | Organization member | `ORG#{org_id}` *(GSI5)* | `USER#{user_id}` |
 | Condition catalog entry | `ORG#{org_id}` | `CATALOG#{catalog_id}` |
+| **Tag** (unified, all `tag_type` values) | `ORG#{org_id}` | `TAG#{tag_type}#{tag_id}` |
+| **Tag config** (per-org cap override) | `ORG#{org_id}` | `TAG_CONFIG#{tag_type}` |
 
 **Entity-type count (single-table overlay): 17 base + 9 TrailPulse = 26 entity types.**
 
-The 17 base entity types include the existing 16 MVP entities plus the new `ConditionCatalogEntry` (org-scoped catalog of preset conditions; reuses the existing `condition_tags` taxonomy and is referenced by per-trail-system feedback configuration in TrailPulse).
+The 17 base entity types include the existing 16 MVP entities plus the new `ConditionCatalogEntry` (org-scoped catalog of preset conditions; reuses the unified `Tag` entity with `tag_type=CONDITION` and is referenced by per-trail-system feedback configuration in TrailPulse).
+
+**Tag Architecture (decided 2026-04-26):** The previously separate `ConditionTag` and `CareReportTypeTag` entities are unified into **one `Tag` entity discriminated by `tag_type`** (current values: `CONDITION`, `CARE_REPORT_TYPE`; the discriminator is open for extension). All tag flavors share the same identical schema (`tag_id`, `org_id`, `tag_type`, `name`, `description`, `color`, `is_active`, `created_at`, `updated_at`, `created_by_user_id`, `version`). Per-org caps are configurable via the new `TagConfig` entity. The merge of two entities into one (`-1`) plus the addition of `TagConfig` (`+1`) leaves the entity-type count unchanged at **26**. Type-specific URLs (`/condition-tags`, `/care-report-tags`) front a single shared service/repository — the discriminator is a backend implementation detail. Adding a new tag type requires no new entity, no new repository, and no new GSI: only a new `tag_type` enum value, a default cap constant, a route module, and a doc row.
 
 The 9 TrailPulse entities (per Phase 7.5/15.1 in `MVP_PROJECT_PLAN.md`) are: `AdditionalQuestions`, `TrailSystemRideCount`, `RideCompletion`, `FeedbackResponses`, `UserPreferences`, `QuestionResponseTracker`, `TrailSystemGeofences`, `CrewMembers`, `FeedbackDeletionAudit`. `TrailConditions` is dropped (the Condition Catalog supersedes it — per-trail-system feedback config references `catalog_id`s instead). `RideEvents` is dropped per the privacy-first redesign — the backend never sees per-user ride history; only anonymous per-trail-system aggregates (`TrailSystemRideCount`) and a short-lived idempotency marker (`RideCompletion`) are stored.
 

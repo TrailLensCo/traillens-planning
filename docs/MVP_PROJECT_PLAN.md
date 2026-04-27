@@ -2340,7 +2340,7 @@ trail_system_history = Table(
 
 ## Phase 6: Tag-Based Status Organization
 
-**Objective**: Implement flexible condition tag system (max 20 tags per organization)
+**Objective**: Implement a flexible **unified Tag entity** with a `tag_type` discriminator. The two flavors needed for MVP are `CONDITION` (max 20 default per org) and `CARE_REPORT_TYPE` (max 25 default per org, owned by Phase 9). Per-org caps are configurable via the new `TagConfig` entity.
 
 **Duration**: 3-5 days
 **Priority**: MEDIUM (enhances status management)
@@ -2348,81 +2348,150 @@ trail_system_history = Table(
 
 ---
 
-### Task 6.1: Create condition_tags DynamoDB Table
+### Tag Architecture (applies to all `tag_type` values, today and future)
 
-**Objective**: Store customizable condition tags for each organization
+All tags — `CONDITION`, `CARE_REPORT_TYPE`, and any future tag type — are **one `Tag` entity discriminated by `tag_type`**. Decided in plan `wse-did-alot-of-snuggly-volcano` (2026-04-26).
+
+**Identical schema across every `tag_type`** (no per-type optional fields, no extension maps): `tag_id` (UUID), `org_id`, `tag_type` (enum, immutable after creation), `name` (1–100), `description` (0–500, **required, may be empty string**), `color` (hex `#RRGGBB`), `is_active` (bool, soft-delete), `created_at`, `updated_at`, `created_by_user_id`, `version` (optimistic-lock counter). If a future tag type genuinely needs a unique field, it warrants a separate entity — never add a per-type optional column to `Tag`.
+
+**Single-table layout**: `PK = ORG#{org_id}, SK = TAG#{tag_type}#{tag_id}` (e.g. `TAG#CONDITION#abc-123`). A single `begins_with(TAG#)` query lists every tag for an org regardless of type; `begins_with(TAG#CONDITION#)` lists only condition tags. No new GSI is required.
+
+**Strict org isolation**: every tag and every `TagConfig` lives under `PK=ORG#{org_id}`. No GSI, list operation, or admin endpoint exposes a tag to a caller in a different organization. Cross-org access is a BOLA violation by definition; enforced at the route layer (`require_org_match`), the service layer (`_verify_tag_org`), and the data layer (PK-based partitioning).
+
+**Adding a new tag type** (5-step recipe, no new entity / no new repository / no new GSI):
+1. Add the new value to the `tag_type` enum.
+2. Add a hardcoded default cap in `_MAX_BY_TAG_TYPE: dict[TagType, int]` (e.g. `TagType.NEW_TYPE: 30`).
+3. Add a thin route module `routes/{new_type}_tags.py` with the four CRUD handlers; each delegates to the shared `TagsService` with the type fixed.
+4. (Optional) Seed a `TagConfig` default for the new type in the org-bootstrap flow.
+5. Add a doc row in `TAGS.md`, `ACCESS_PATTERNS.md`, `dynamodb-spec.md`, and the planning docs.
+
+---
+
+### Task 6.1: Define the unified `Tag` entity (single-table item under the org partition)
+
+**Objective**: Define the canonical `Tag` entity that both Phase 6 (`CONDITION`) and Phase 9 (`CARE_REPORT_TYPE`) write through.
 
 **Files to Modify**:
-- `infra/components/dynamodb.py` (add condition_tags table)
+- `api-dynamo/src/packages/traillens_db/src/traillens_db/entities/tag.py` (new file replacing `condition_tag.py` + `type_tag.py`)
+- `infra/pulumi/...` (no per-type tables — all tags live in the existing single-table store; the legacy multi-table `condition_tags`/`type_tags` infra resources are dropped)
 
-**Table Schema**:
+**Entity schema** (identical across every `tag_type`):
 ```python
-condition_tags = Table(
-    table_name="condition_tags",
-    partition_key=Attribute(name="org_id", type="S"),
-    sort_key=Attribute(name="tag_id", type="S"),
-    attributes={
-        "tag_id": str,               # UUID
-        "org_id": str,
-        "name": str,                 # e.g., "winter", "maintenance"
-        "color": str,                # Hex color for UI display
-        "description": str,
-        "is_active": bool,
-        "created_at": str,
-        "created_by": str,
-    }
-)
+class TagEntity:
+    tag_id: str                 # UUID
+    org_id: str                 # tenancy scope; immutable
+    tag_type: TagType           # CONDITION | CARE_REPORT_TYPE; immutable after creation
+    name: str                   # 1–100 chars
+    description: str            # 0–500 chars; required, may be empty string
+    color: str                  # hex #RRGGBB
+    is_active: bool             # soft-delete; default True
+    created_at: str             # ISO8601
+    updated_at: str             # ISO8601
+    created_by_user_id: str     # captured from JWT subject at creation
+    version: int                # optimistic-lock counter
 ```
 
+**DynamoDB layout**: `PK=ORG#{org_id}, SK=TAG#{tag_type}#{tag_id}`. Co-located with the org's other adjacency-list children.
+
+**Per-type defaults** (live in `_MAX_BY_TAG_TYPE: dict[TagType, int]`):
+- `CONDITION`: default cap `20` (raised from 10 in the docs-mvp-backend-features pass). Default seeded tags: `Open`, `Closed`, `Caution`.
+- `CARE_REPORT_TYPE`: default cap `25` (owned by Phase 9). Default seeded tags: `Maintenance`, `Hazard`, `Tree-down`, `Erosion`, `Litter`, `Signage`, `Bridge-repair`.
+
 **Implementation Steps**:
-1. Define table schema
-2. Deploy table
-3. Add org-level constraint: max 20 active tags per org
-4. Create default tags for new organizations:
-   - "winter", "maintenance", "caution", "wet-conditions", "dry-conditions"
+1. Define the unified `TagEntity` and `TagType` enum in the shared `traillens_db` package.
+2. Implement a single `TagRepository` with `list_by_organization(org_id, tag_type, ...)`, `get_by_id(org_id, tag_type, tag_id)`, `create(entity)`, `update(...)`, `soft_delete(...)` — all using the `PK=ORG#{org_id}, SK=TAG#{tag_type}#{tag_id}` shape.
+3. Implement the `TagConfig` entity (Task 6.1.1) and per-org cap-resolution.
+4. Implement default-tag seeding for new orgs (one PutItem per default tag, per type).
 
 **Acceptance Criteria**:
-- Table created
-- Max 20 tags enforced
-- Default tags created
+- One `TagEntity` class; no `ConditionTagEntity` / `TypeTagEntity` remain.
+- One `TagRepository` class; no per-type repositories remain.
+- Default tags created on org bootstrap.
+
+**AI-Assisted Timeline**: 3 hours
+
+---
+
+### Task 6.1.1: Per-org `TagConfig` entity (configurable caps)
+
+**Objective**: Allow org-admins to override the per-type cap without a code deploy.
+
+**Entity schema**:
+```python
+class TagConfigEntity:
+    org_id: str
+    tag_type: TagType
+    max_count: int       # 1–500
+    created_at: str
+    updated_at: str
+    version: int
+```
+
+**DynamoDB layout**: `PK=ORG#{org_id}, SK=TAG_CONFIG#{tag_type}` (e.g. `TAG_CONFIG#CONDITION`). Co-located with the org's tags so a single `Query(PK=ORG#{org_id}, SK begins_with TAG_CONFIG#)` returns every cap config in one round-trip.
+
+**Cap resolution algorithm** (server-side, on every tag write):
+1. Read `TAG_CONFIG#{tag_type}` for the caller's org. In-memory cache eligible (60-second TTL); persists only across warm Lambda invocations of the same container.
+2. If the item exists → use `max_count` from it.
+3. If the item does not exist → fall back to the hardcoded default in `_MAX_BY_TAG_TYPE`.
+4. Count current active tags of this type via `Query(PK=ORG#{org_id}, SK begins_with TAG#{tag_type}#)` with a count-only projection.
+5. Reject the create with `409 Conflict` and error code `TAG_CAP_EXCEEDED` if `current_count >= max_count`.
+
+**Cap-lowering safety rule**: when `PUT /tag-config/{tag_type}` would set a `max_count` below the current active tag count, the server returns `409 Conflict` with error code `TAG_CAP_BELOW_CURRENT_USAGE`. The org-admin must first soft-delete enough tags to fit under the new cap.
+
+**Defaults seeding**: `TagConfig` items are created **lazily** — the first `PUT /tag-config/{tag_type}` creates the item. Until then the hardcoded default applies.
 
 **AI-Assisted Timeline**: 2 hours
 
 ---
 
-### Task 6.2: Implement Condition Tag CRUD API Endpoints
+### Task 6.2: Implement Tag CRUD + Tag-Config API Endpoints
 
-**Objective**: Allow org-admins to manage tags
+**Objective**: Allow org-admins to manage tags and configure per-type caps.
 
 **Files to Modify**:
-- `api-dynamo/routes/condition_tags.py` (new file)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/condition_tags.py` (new — handlers for `tag_type=CONDITION`)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/care_report_tags.py` (new — handlers for `tag_type=CARE_REPORT_TYPE`; replaces the legacy `/tags/care-report-types` route module)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/tag_config.py` (new — config GET + PUT)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/services/tags_service.py` (rewritten — type-keyed methods that share a single `TagRepository`)
 
-**Endpoints** (URL canonical name is `condition-tags` per docs-mvp-backend-features rename; entity name is `condition_tag`):
-1. `GET /api/organizations/{org_id}/condition-tags` - List organization's condition tags
-2. `POST /api/organizations/{org_id}/condition-tags` - Create new tag (check max 20 limit per docs-mvp-backend-features)
-3. `PUT /api/organizations/{org_id}/condition-tags/{tag_id}` - Update tag
-4. `DELETE /api/organizations/{org_id}/condition-tags/{tag_id}` - Delete tag (if not in use)
+**Endpoints** (10 total — 8 tag CRUD + 2 tag-config):
+
+CRUD on tags (eight routes, four per `tag_type`):
+1. `GET /api/organizations/{org_id}/condition-tags` — List condition tags. Auth: any org member.
+2. `POST /api/organizations/{org_id}/condition-tags` — Create condition tag (cap enforced via `TagConfig` resolution). Auth: org-admin.
+3. `PUT /api/organizations/{org_id}/condition-tags/{tag_id}` — Update (optimistic lock on `version`). Auth: org-admin.
+4. `DELETE /api/organizations/{org_id}/condition-tags/{tag_id}` — Soft-delete. Auth: org-admin.
+5. `GET /api/organizations/{org_id}/care-report-tags` — List care-report-type tags. Auth: any org member.
+6. `POST /api/organizations/{org_id}/care-report-tags` — Create care-report-type tag (cap enforced). Auth: org-admin.
+7. `PUT /api/organizations/{org_id}/care-report-tags/{tag_id}` — Update. Auth: org-admin.
+8. `DELETE /api/organizations/{org_id}/care-report-tags/{tag_id}` — Soft-delete. Auth: org-admin.
+
+Tag-config:
+9. `GET /api/organizations/{org_id}/tag-config` — List per-org cap configs (one row per `tag_type`; rows without an explicit override show the hardcoded default with `is_default=true`). Auth: any org member.
+10. `PUT /api/organizations/{org_id}/tag-config/{tag_type}` — Set per-org cap for a tag type. Body `{"max_count": int, "version": int}`. Auth: org-admin. Rejects with `TAG_CAP_BELOW_CURRENT_USAGE` if the new cap is below current active tag count.
 
 **Implementation Steps**:
-1. Implement CRUD endpoints
-2. Add validation for **max 20 tags per organization** (raised from 10 in the docs-mvp-backend-features pass — `tags_service.py` validation constant)
-3. Prevent deletion of tags in use
-4. Add authorization (org-admin only)
-5. Write tests
+1. Implement the tag CRUD route modules (thin handlers that delegate to `TagsService`).
+2. Implement the tag-config route module.
+3. Implement cap enforcement (count-then-create per Task 6.1.1). **Net-new** — current `create_condition_tag`/`create_care_report_type_tag` do not enforce caps today.
+4. Add authorization (org-admin for write; any org member for read).
+5. Write tests covering cap enforcement, optimistic locking, BOLA prevention, and the cap-lowering safety rule.
 
 **Testing**:
-- Create tag
-- Try to create 21st tag (should fail)
-- Update tag color
-- Try to delete tag in use (should fail)
-- Delete unused tag
+- Create up to the cap; 21st condition tag (or 26th care-report tag) returns 409 `TAG_CAP_EXCEEDED`.
+- Update tag via optimistic lock; stale `version` returns 409.
+- Soft-delete tag; subsequent list excludes it.
+- `PUT /tag-config/CONDITION` sets cap to 30; create now allowed up to 30.
+- `PUT /tag-config/CONDITION` set to 5 with 12 active tags returns 409 `TAG_CAP_BELOW_CURRENT_USAGE`.
+- BOLA: caller in org A cannot read/write tags in org B (returns 403 with `BOLA_VIOLATION`).
 
 **Acceptance Criteria**:
-- CRUD operations functional
-- Max 20 limit enforced
-- Authorization working
+- 10 endpoints functional.
+- Cap enforcement (default and per-org override) working.
+- Optimistic locking working.
+- BOLA prevention verified.
 
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 6 hours
 
 ---
 
@@ -3109,39 +3178,34 @@ trail_care_report_comments = Table(
 
 ---
 
-### Task 9.3: Create care_report_type_tags Table
+### Task 9.3: Add the `CARE_REPORT_TYPE` tag flavor (single unified `Tag` entity from Phase 6)
 
-**Objective**: Flexible categorization for reports (max 25 tags per org)
+**Objective**: Care reports can be categorized via tags of `tag_type=CARE_REPORT_TYPE`. **Reuses the unified `Tag` entity defined in Phase 6** — no new entity, no new repository, no new table. Default cap 25 per org (configurable via `TagConfig`).
 
 **Files to Modify**:
-- `infra/components/dynamodb.py` (add table)
+- (none — the `TagEntity` and `TagRepository` from Phase 6 already cover this flavor; the CRUD route module `care_report_tags.py` is created in Phase 6 Task 6.2 alongside `condition_tags.py`)
 
-**Table Schema**:
-```python
-care_report_type_tags = Table(
-    table_name="care_report_type_tags",
-    partition_key=Attribute(name="org_id", type="S"),
-    sort_key=Attribute(name="tag_id", type="S"),
-    attributes={
-        "tag_id": str,
-        "org_id": str,
-        "name": str,                 # e.g., "tree-down", "erosion", "hazard"
-        "color": str,
-        "description": str,
-        "is_active": bool,
-        "created_at": str,
-    }
-)
+**Persistence shape** (a `Tag` item with `tag_type=CARE_REPORT_TYPE`):
+
+```text
+PK: ORG#{org_id}
+SK: TAG#CARE_REPORT_TYPE#{tag_id}
+attributes: identical schema to every other tag — tag_id, org_id, tag_type, name,
+            color, description (required, may be empty), is_active, created_at,
+            updated_at, created_by_user_id, version
 ```
 
-**Default Tags**:
-- maintenance, hazard, tree-down, erosion, litter, signage, bridge-repair
+**Default seeded tags** (created during org bootstrap; same lazy-default pattern as `CONDITION` tags):
+- `Maintenance`, `Hazard`, `Tree-down`, `Erosion`, `Litter`, `Signage`, `Bridge-repair`
+
+**Per-org cap**: default `25`, configurable via `PUT /api/organizations/{org_id}/tag-config/CARE_REPORT_TYPE` (Phase 6 Task 6.1.1). Cap-resolution and cap-lowering safety rule are identical to other tag types.
 
 **Acceptance Criteria**:
-- Table created
-- Max 25 tags per org enforced
+- `Tag` items with `tag_type=CARE_REPORT_TYPE` queryable via `Query(PK=ORG#{org_id}, SK begins_with TAG#CARE_REPORT_TYPE#)`.
+- Default cap 25 enforced; raise/lower via `TagConfig`.
+- Default tags created on org bootstrap.
 
-**AI-Assisted Timeline**: 2 hours
+**AI-Assisted Timeline**: 0 hours (subsumed into Phase 6 Task 6.1 / 6.2 — no separate work)
 
 ---
 
@@ -3261,26 +3325,25 @@ care_report_type_tags = Table(
 
 ---
 
-### Task 9.7: Implement Type Tag Management
+### Task 9.7: Care-Report-Type Tag Management UI
 
-**Objective**: Allow org-admin to manage report type tags (max 25 per org)
+**Objective**: Allow org-admin to manage care-report-type tags (default cap 25 per org; configurable via `TagConfig` per Phase 6 Task 6.1.1).
 
 **Files to Modify**:
-- `api-dynamo/routes/care_report_type_tags.py` (new file)
-- `webui/src/features/organization/pages/OrganizationSettings.tsx` (add Type Tags tab)
+- `webui/src/features/organization/pages/OrganizationSettings.tsx` (add Care Report Tags tab)
 
-**Implementation Steps**:
-1. Implement CRUD API for type tags
-2. Enforce max 25 tags per org
-3. Create UI for managing type tags
-4. Auto-create default tags for new orgs
+**Implementation Notes**:
+- The CRUD API for `tag_type=CARE_REPORT_TYPE` is delivered in Phase 6 Task 6.2 (route module `routes/care_report_tags.py`, handlers delegate to the shared `TagsService`). No new backend work for tag CRUD here.
+- The cap (default 25) is enforced server-side via the unified cap-resolution algorithm (`TagConfig` lookup → hardcoded fallback → count active tags → reject on breach).
+- Default tags are seeded on org bootstrap (Phase 6 Task 6.1).
+- The UI calls `GET/POST/PUT/DELETE /api/organizations/{org_id}/care-report-tags` (renamed from `/tags/care-report-types` in the docs-mvp-backend-features pass).
 
 **Acceptance Criteria**:
-- CRUD operations functional
-- Max 25 tags enforced
-- Tag management UI complete
+- CRUD UI functional against the unified `Tag` API for `tag_type=CARE_REPORT_TYPE`.
+- Cap (default 25 or org override) surfaced in the UI.
+- Cap-lowering safety rule (`TAG_CAP_BELOW_CURRENT_USAGE`) surfaced inline when an admin tries to lower the cap below current usage.
 
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 2 hours (UI only; backend delivered in Phase 6)
 
 ---
 

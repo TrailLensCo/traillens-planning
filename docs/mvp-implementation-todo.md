@@ -1955,10 +1955,29 @@ The tasks below were surfaced by the `topic/docs-mvp-backend-features` documenta
 - [ ] Integration tests for `save_to_catalog=true` flag on `PATCH /condition`
 - [ ] Documentation propagation across REST client libs (jsrestapi + androidrestapi) and UI flow docs (already done in this docs pass — verify checked in)
 
-### Tag-Cap Raise (10 → 20)
+### Tag Consolidation — Unified `Tag` Entity (plan `wse-did-alot-of-snuggly-volcano`)
 
-- [ ] Update `tags_service.py` validation constant from 10 → 20 for `condition_tags`
-- [ ] Update tests asserting the per-org `condition_tags` limit (currently asserting 10)
+This block supersedes the earlier "Tag-Cap Raise" task list. The cap raise is folded into the consolidation work since the unified service handles both flavors with type-keyed default caps and per-org `TagConfig` overrides.
+
+- [ ] Define unified `TagEntity` and `TagType` enum in `api-dynamo/src/packages/traillens_db/src/traillens_db/entities/tag.py`; delete `condition_tag.py` + `type_tag.py`
+- [ ] Implement single `TagRepository` in `api-dynamo/src/packages/traillens_db/src/traillens_db/repositories/tag.py` with type-keyed methods; delete `condition_tag.py` + `type_tag.py` repos
+- [ ] Define `TagConfigEntity` in `entities/tag_config.py` (fields: `org_id`, `tag_type`, `max_count` (1–500), `created_at`, `updated_at`, `version`)
+- [ ] Implement `TagConfigRepository` (PK=`ORG#{org_id}`, SK=`TAG_CONFIG#{tag_type}`)
+- [ ] Rewrite `api/services/tags_service.py` — type-keyed methods that share the unified repository; introduce `_MAX_BY_TAG_TYPE: dict[TagType, int]` constants (defaults: CONDITION=20, CARE_REPORT_TYPE=25); read `TagConfig` (or default) on every create; reject with `409 TAG_CAP_EXCEEDED` if cap would breach
+- [ ] **Net-new** cap enforcement on create — current `create_condition_tag` (line 87) and `create_care_report_type_tag` (line 225) **do not enforce caps today**; this is new work
+- [ ] Split route module into two thin handlers + one config module: `routes/condition_tags.py`, `routes/care_report_tags.py`, `routes/tag_config.py`
+- [ ] Rename URL `/api/organizations/{org_id}/tags/care-report-types` → `/api/organizations/{org_id}/care-report-tags` for symmetry with `/condition-tags`
+- [ ] Add new routes `GET /api/organizations/{org_id}/tag-config` and `PUT /api/organizations/{org_id}/tag-config/{tag_type}` (org-admin for write, any org member for read)
+- [ ] Implement cap-lowering safety rule: `PUT /tag-config/{tag_type}` rejects with `409 TAG_CAP_BELOW_CURRENT_USAGE` if new `max_count` is below current active tag count
+- [ ] Implement org-bootstrap default-tag seeding: `Open`, `Closed`, `Caution` for CONDITION; `Maintenance`, `Hazard`, `Tree-down`, `Erosion`, `Litter`, `Signage`, `Bridge-repair` for CARE_REPORT_TYPE
+- [ ] Add `description` to `Tag` schema as **required, may be empty string** (was absent on `ConditionTag`, optional/nullable on `TypeTag`); ensures identical schema across all `tag_type` values
+- [ ] Server-side validation of `condition_tag_ids[]` (on `ConditionObservation`, `ConditionCatalogEntry`, `TrailSystem`) — every element must resolve to `Tag` with `tag_type=CONDITION`, same org, `is_active=true`; reject with `400 INVALID_TAG_REFERENCE` otherwise
+- [ ] Server-side validation of `type_tag_id` (on `CareReport`) — when non-null, must resolve to `Tag` with `tag_type=CARE_REPORT_TYPE`, same org, `is_active=true`; reject with `400 INVALID_TAG_REFERENCE` otherwise
+- [ ] Server-side denormalization on write: populate `condition_tag_names[]` from loaded `Tag.name` values in the same TransactWrite as the parent record
+- [ ] Rewrite tag-related tests: cap enforcement (default and per-org override), optimistic locking, BOLA prevention, `TagConfig` upsert, cap-lowering safety rule, default-tag seeding
+- [ ] Add 5 access patterns AP-TAG01–AP-TAG05 (List by org + type, List all by org, Create, Update, Soft-delete) and 2 access patterns AP-TC01–AP-TC02 (List configs, Upsert config) to `ACCESS_PATTERNS.md`
+- [ ] Mark `AP-O04` and `AP-O05` as `**SUPERSEDED →** AP-TAG01 (parameterized by tag_type)`
+- [ ] Update field-description prose in `dynamodb-spec.json`/`.md` and `DYNAMO_DATABASE_DESIGN.md` for `condition_tag_ids`, `condition_tag_names`, `type_tag_id` to point at the unified `Tag` entity
 
 ### Backup Password Authentication (Cognito SRP)
 

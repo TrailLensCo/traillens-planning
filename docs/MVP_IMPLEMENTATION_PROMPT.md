@@ -292,33 +292,31 @@ Based on:
 - **Created at** - Timestamp
 - **Updated at** - Timestamp
 
-#### 1.2 Tag-Based Status Organization
+#### 1.2 Tag-Based Status Organization (unified `Tag` entity, `tag_type=CONDITION`)
 
-**Status Tags** provide flexible categorization and organization of trail system statuses.
+**Condition Tags** are the `tag_type=CONDITION` flavor of the unified `Tag` entity. They provide flexible categorization and organization of trail system statuses. The same `Tag` entity also serves care-report categorization via `tag_type=CARE_REPORT_TYPE` (Section 2.7).
+
+> **Architectural note (decided 2026-04-26 in plan `wse-did-alot-of-snuggly-volcano`):** Every tag, regardless of `tag_type`, is the same entity with the same identical schema. Per-type rules (URL prefix, default cap, default seeded tags) live in service-layer constants keyed by `tag_type`. Adding a new tag type does **not** require a new entity, repository, or GSI — only a new enum value, default cap, route module, and doc row.
 
 - **Tag Scope:** Per trail organization
-  - Each organization manages their own set of tags
-  - Hydrocut tags are separate from GORBA tags
+  - Strict org isolation: every `Tag` lives under DynamoDB `PK=ORG#{org_id}` and is unreachable to callers in other organizations (enforced by route-layer `require_org_match`, service-layer `_verify_tag_org`, and the data-layer partition design itself)
+  - Hydrocut tags are physically separate from GORBA tags — no GSI exposes a cross-org view
   - All trail systems within an organization share the same tag pool
 
-- **Tag Limit:** Maximum 10 tags per organization
-  - Prevents UI clutter and encourages focused categorization
-  - Organizations must be thoughtful about tag creation
+- **Tag Limit (default):** 20 condition tags per organization (raised from 10 in the docs-mvp-backend-features pass)
+  - Per-org override: org-admins can raise or lower the cap via `PUT /api/organizations/{org_id}/tag-config/CONDITION` (creates a `TagConfig` item)
+  - Server enforces the active cap on every create — read `TagConfig` (or fall back to default), `Query` for current count, reject with `409 TAG_CAP_EXCEEDED` if the cap would be breached
 
-- **Multiple Tags per Status:** Statuses can have multiple tags assigned
-  - Examples:
-    - Status "Icy Conditions" could be tagged: ["Winter", "Weather-Related", "Caution"]
-    - Status "Closed - Snow Removal" could be tagged: ["Winter", "Maintenance", "Temporary"]
-  - Enables rich, flexible categorization schemes
-  - Supports complex filtering and sorting in interfaces
+- **Identical Schema (every `tag_type`):** `tag_id`, `org_id`, `tag_type`, `name` (1–100), `description` (0–500, **required, may be empty**), `color`, `is_active`, `created_at`, `updated_at`, `created_by_user_id`, `version`. No per-type optional fields.
+
+- **Multiple Tags per Status:** Statuses can have multiple condition tags assigned (denormalized as `condition_tag_ids[]` and `condition_tag_names[]` on observations / catalog entries / trail-system condition state)
+  - Server validates every referenced `tag_id` resolves to a `Tag` in the same org with `tag_type=CONDITION` and `is_active=true`; rejects with `400 INVALID_TAG_REFERENCE` otherwise
 
 - **Tag Management (CRUD Operations):**
-  - **Create:** Anyone with status access can create new tags
-  - **Read:** All users can view tags assigned to statuses
-  - **Update:** Anyone with status access can rename tags
-  - **Delete:** Anyone with status access can delete tags
-    - Deleting a tag removes it from all statuses
-    - Requires confirmation (destructive operation)
+  - **Create / Update / Delete:** `org-admin` only (`require_admin_role`). Soft-delete (sets `is_active=false`); hard delete restricted further.
+  - **Read:** any org member.
+  - **Update is optimistic-locked** on the `version` field — stale `version` returns `409 Conflict`.
+  - **Cap-lowering safety rule:** lowering the per-org cap below the current active tag count is rejected with `TAG_CAP_BELOW_CURRENT_USAGE`.
 
 - **Tag Assignment:**
   - **During Status Creation:** Interface allows assigning tags when creating a new status type
@@ -331,14 +329,19 @@ Based on:
     - Trail crew selects "Winter" tag filter
     - Only statuses tagged with "Winter" appear in status dropdown
     - Filter remains active until manually cleared or session ends
-  - Enables focused status management (e.g., viewing only winter-related statuses when changing status in winter months)
 
 - **Tag Use Cases:**
-  - **Seasonal organization:** "Winter", "Spring", "Summer", "Fall"
+  - **Seasonal organization:** "Winter Closure", "Spring Mud Season"
   - **Severity categorization:** "Open", "Caution", "Closed"
   - **Cause classification:** "Weather", "Maintenance", "Wildlife", "Events"
   - **Temporal markers:** "Temporary", "Permanent", "Scheduled"
   - **Custom organizational schemes:** Organizations define tags that match their workflow
+
+- **Implementation guidance:**
+  - One `TagEntity` class and one `TagRepository` (in `traillens_db.entities.tag` and `traillens_db.repositories.tag`) cover every `tag_type`. The previously separate `ConditionTagEntity` / `TypeTagEntity` are dropped.
+  - One `TagsService` with type-keyed methods backed by the shared repository. The cap source is `_MAX_BY_TAG_TYPE: dict[TagType, int]` (defaults), overridden by `TagConfig` items at runtime.
+  - Two route modules per public surface: `routes/condition_tags.py` (this section) and `routes/care_report_tags.py` (Section 2.7) — thin handlers that delegate to the shared service with the `tag_type` fixed.
+  - One `tag-config` route module (`routes/tag_config.py`) for cap configuration.
 
 #### 1.3 Status Attributes
 
@@ -551,26 +554,24 @@ Based on:
 - Assignee notified when report is assigned to them
 - Org-admin notified of high-priority (P1/P2) reports
 
-#### 2.7 Care Report Type Tags
+#### 2.7 Care Report Type Tags (unified `Tag` entity, `tag_type=CARE_REPORT_TYPE`)
 
-**Separate Tag Pool:**
+**Separate flavor of the same `Tag` entity (Section 1.2):**
 
-- Care report type tags are **separate** from report status (P1-P5)
-- Each organization manages their own care report type tag pool
-- Maximum 25 type tags per organization
+- `tag_type=CARE_REPORT_TYPE` is its own flavor of the unified `Tag` entity. Identical schema to `CONDITION` tags. Different URL prefix (`/care-report-tags`) and different default cap.
+- Each organization manages its own care-report-type tag pool — strict org isolation enforced exactly the same way as condition tags (`PK=ORG#{org_id}` partitioning, `require_org_match` middleware, `_verify_tag_org` service helper).
+- **Default cap: 25 per organization.** Configurable via `PUT /api/organizations/{org_id}/tag-config/CARE_REPORT_TYPE`.
 
-**Tag Management:**
+**Tag Management (CRUD):**
 
-- **Create** - Org-admin can create new type tags
-- **Update** - Org-admin can rename type tags
-- **Delete** - Org-admin can delete type tags (removes tag from all reports)
-- **Assignment** - Anyone submitting a report can assign existing type tags
+- **Create / Update / Delete:** `org-admin` only. Cap enforcement is server-side (count-then-create using the resolved cap from `TagConfig` or default). Soft-delete sets `is_active=false`; deletion of a tag in use is allowed (orphaned `type_tag_id` references on care reports surface as "Unknown type" in UI rather than erroring).
+- **Read:** any org member.
+- **Assignment:** anyone submitting a report can attach an existing type tag via `type_tag_id`. Server validates that the referenced `tag_id` resolves to a `Tag` in the same org with `tag_type=CARE_REPORT_TYPE` and `is_active=true`; rejects with `400 INVALID_TAG_REFERENCE` otherwise.
 
 **Common Type Tag Examples:**
 
 - Work type: "maintenance", "repair", "inspection", "cleanup"
 - Issue type: "hazard", "tree-down", "erosion", "flooding", "signage", "bridge"
-- Season: "winter", "spring", "summer", "fall"
 - Urgency: "urgent", "routine"
 - Location: "trailhead", "bridge", "parking", "signage"
 
@@ -578,7 +579,9 @@ Based on:
 
 - Filter reports by type tags
 - Sort reports by tag combinations
-- Sticky filtering (like status tags - persist across sessions)
+- Sticky filtering (like condition tags — persist across sessions)
+
+**Implementation note:** No separate entity / repository / service from Section 1.2. The `routes/care_report_tags.py` route module is a thin handler set that delegates to the same `TagsService` with `tag_type=CARE_REPORT_TYPE` fixed. The legacy URL `/api/organizations/{org_id}/tags/care-report-types` is renamed to `/api/organizations/{org_id}/care-report-tags` for symmetry with `/condition-tags` (per the docs-mvp-backend-features pass).
 
 #### 2.8 Dashboard Views
 
