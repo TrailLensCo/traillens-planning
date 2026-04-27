@@ -1930,6 +1930,132 @@ All tasks in Section B are about **WRITING CONTENT** into the `docs/MVP_PROJECT_
 
 ---
 
+## Section C: Backend MVP Feature Additions (post-docs-mvp-backend-features pass)
+
+The tasks below were surfaced by the `topic/docs-mvp-backend-features` documentation pass (source: planning audit `i-just-discovered-you-golden-kite.md`). Each entry is an implementation task to be picked up after the docs land. Sub-sections group by feature.
+
+### Phase 7.5: Condition Catalog (Org-Scoped Preset Library)
+
+- [ ] Define `ConditionCatalogEntry` entity in `traillens_db` (`api-dynamo/src/packages/traillens_db/src/traillens_db/entities/condition_catalog.py`)
+- [ ] Define `condition_catalog_repository` (org-scoped repository pattern, mirrors `condition_tag` and `type_tag` repos)
+- [ ] Define `condition_catalog_service` (CRUD + apply-to-trail-system + save-from-condition orchestration)
+- [ ] Add 7 new routes under tag `condition-catalog` to `api-dynamo/docs/openapi.json` and implement in `api-dynamo/src/lambdas/api_dynamo/src/api/routes/condition_catalog.py`:
+  - [ ] `GET    /api/organizations/{org_id}/condition-catalog`
+  - [ ] `GET    /api/organizations/{org_id}/condition-catalog/{catalog_id}`
+  - [ ] `POST   /api/organizations/{org_id}/condition-catalog`
+  - [ ] `PATCH  /api/organizations/{org_id}/condition-catalog/{catalog_id}`
+  - [ ] `DELETE /api/organizations/{org_id}/condition-catalog/{catalog_id}`
+  - [ ] `POST   /api/organizations/{org_id}/condition-catalog/upload-url`
+  - [ ] `POST   /api/trail-systems/{trail_system_id}/condition/apply-catalog/{catalog_id}`
+- [ ] Modify existing `PATCH /api/trail-systems/{trail_system_id}/condition` to accept optional `catalog_entry_id` and `save_to_catalog: bool` flags (TransactWrite path covers both)
+- [ ] Add GSI1 catalog overload to DynamoDB single-table schema (`GSI1PK = ORG#{org_id}#CATALOG#ACTIVE`, `GSI1SK = USAGE#{usage_count_zero_padded}#CATALOG#{catalog_id}`)
+- [ ] Add S3 key prefix `orgs/{org_id}/catalog/{catalog_id}.jpg` plus WebP variants to `photo_processor` Lambda (mirrors existing trail-photo flow)
+- [ ] Add 7 access patterns AP-CC01–AP-CC07 to `api-dynamo/docs/ACCESS_PATTERNS.md` (Status: IMPLEMENTED ❌ initially)
+- [ ] Integration tests for the apply-catalog TransactWrite (race-condition coverage on `usage_count` increments and concurrent apply)
+- [ ] Integration tests for `save_to_catalog=true` flag on `PATCH /condition`
+- [ ] Documentation propagation across REST client libs (jsrestapi + androidrestapi) and UI flow docs (already done in this docs pass — verify checked in)
+
+### Tag Consolidation — Unified `Tag` Entity (plan `wse-did-alot-of-snuggly-volcano`)
+
+This block supersedes the earlier "Tag-Cap Raise" task list. The cap raise is folded into the consolidation work since the unified service handles both flavors with type-keyed default caps and per-org `TagConfig` overrides.
+
+- [ ] Define unified `TagEntity` and `TagType` enum in `api-dynamo/src/packages/traillens_db/src/traillens_db/entities/tag.py`; delete `condition_tag.py` + `type_tag.py`
+- [ ] Implement single `TagRepository` in `api-dynamo/src/packages/traillens_db/src/traillens_db/repositories/tag.py` with type-keyed methods; delete `condition_tag.py` + `type_tag.py` repos
+- [ ] Define `TagConfigEntity` in `entities/tag_config.py` (fields: `org_id`, `tag_type`, `max_count` (1–500), `created_at`, `updated_at`, `version`)
+- [ ] Implement `TagConfigRepository` (PK=`ORG#{org_id}`, SK=`TAG_CONFIG#{tag_type}`)
+- [ ] Rewrite `api/services/tags_service.py` — type-keyed methods that share the unified repository; introduce `_MAX_BY_TAG_TYPE: dict[TagType, int]` constants (defaults: CONDITION=20, CARE_REPORT_TYPE=25); read `TagConfig` (or default) on every create; reject with `409 TAG_CAP_EXCEEDED` if cap would breach
+- [ ] **Net-new** cap enforcement on create — current `create_condition_tag` (line 87) and `create_care_report_type_tag` (line 225) **do not enforce caps today**; this is new work
+- [ ] Split route module into two thin handlers + one config module: `routes/condition_tags.py`, `routes/care_report_tags.py`, `routes/tag_config.py`
+- [ ] Rename URL `/api/organizations/{org_id}/tags/care-report-types` → `/api/organizations/{org_id}/care-report-tags` for symmetry with `/condition-tags`
+- [ ] Add new routes `GET /api/organizations/{org_id}/tag-config` and `PUT /api/organizations/{org_id}/tag-config/{tag_type}` (org-admin for write, any org member for read)
+- [ ] Implement cap-lowering safety rule: `PUT /tag-config/{tag_type}` rejects with `409 TAG_CAP_BELOW_CURRENT_USAGE` if new `max_count` is below current active tag count
+- [ ] Implement org-bootstrap default-tag seeding: `Open`, `Closed`, `Caution` for CONDITION; `Maintenance`, `Hazard`, `Tree-down`, `Erosion`, `Litter`, `Signage`, `Bridge-repair` for CARE_REPORT_TYPE
+- [ ] Add `description` to `Tag` schema as **required, may be empty string** (was absent on `ConditionTag`, optional/nullable on `TypeTag`); ensures identical schema across all `tag_type` values
+- [ ] Server-side validation of `condition_tag_ids[]` (on `ConditionObservation`, `ConditionCatalogEntry`, `TrailSystem`) — every element must resolve to `Tag` with `tag_type=CONDITION`, same org, `is_active=true`; reject with `400 INVALID_TAG_REFERENCE` otherwise
+- [ ] Server-side validation of `type_tag_id` (on `CareReport`) — when non-null, must resolve to `Tag` with `tag_type=CARE_REPORT_TYPE`, same org, `is_active=true`; reject with `400 INVALID_TAG_REFERENCE` otherwise
+- [ ] Server-side denormalization on write: populate `condition_tag_names[]` from loaded `Tag.name` values in the same TransactWrite as the parent record
+- [ ] Rewrite tag-related tests: cap enforcement (default and per-org override), optimistic locking, BOLA prevention, `TagConfig` upsert, cap-lowering safety rule, default-tag seeding
+- [ ] Add 5 access patterns AP-TAG01–AP-TAG05 (List by org + type, List all by org, Create, Update, Soft-delete) and 2 access patterns AP-TC01–AP-TC02 (List configs, Upsert config) to `ACCESS_PATTERNS.md`
+- [ ] Mark `AP-O04` and `AP-O05` as `**SUPERSEDED →** AP-TAG01 (parameterized by tag_type)`
+- [ ] Update field-description prose in `dynamodb-spec.json`/`.md` and `DYNAMO_DATABASE_DESIGN.md` for `condition_tag_ids`, `condition_tag_names`, `type_tag_id` to point at the unified `Tag` entity
+
+### Backup Password Authentication (Cognito SRP)
+
+- [ ] Add `signInWithSrp(email, password)` method to `webui/packages/jsrestapi/src/auth/AuthManager.ts` (currently exposes 9 public methods, no SRP method)
+- [ ] Document the existing `initiateAuth(authFlow="USER_SRP_AUTH")` pattern in `androidrestapi/lib/src/main/kotlin/com/traillenshq/api/auth/CognitoAuthApi.kt` README/docs (no new method — already reachable via the request `authFlow` parameter)
+- [ ] Add debug-build-only password login screens to `androiduser` (gated by `BuildConfig.DEBUG`)
+- [ ] Add debug-build-only password login screens to `androidadmin` (gated by `BuildConfig.DEBUG`)
+- [ ] Cognito infra: upgrade `user_pool_tier` from `ESSENTIALS` to `PLUS` in `infra/pulumi/components/auth.py`
+- [ ] Cognito infra: add `user_pool_add_ons=aws.cognito.UserPoolUserPoolAddOnsArgs(advanced_security_mode="AUDIT")`, then promote to `"ENFORCED"` after 2-week soak
+- [ ] Configure adaptive-auth response policy (low → allow, medium → MFA, high → block)
+- [ ] Add AWS WAF rules on the Cognito endpoint and on API Gateway for volumetric/brute-force protection (Threat Protection does NOT cover this)
+
+### Background-Worker Lambdas
+
+- [ ] Implement `scheduled_condition_processor` Lambda (Architecture A) in `api-dynamo/src/lambdas/scheduled_condition_processor/`
+  - [ ] EventBridge rule `cron(0/15 * * * ? *)` (every 15 minutes)
+  - [ ] Memory 256 MB, timeout 60s, ARM64
+  - [ ] Handles fire-due-scheduled-conditions AND pre-fire reminder dispatch in the same handler
+- [ ] Add GSI4 (`GSI4PK = SCHEDULED#{status}`, `GSI4SK = scheduled_at_iso8601`) to DynamoDB schema; on status flip the item is removed from `SCHEDULED#PENDING` partition
+- [ ] Add 3 access patterns AP-SC04 (query due-now), AP-SC05 (query reminder-window), AP-SC06 (mark applied/cancelled) to `ACCESS_PATTERNS.md`
+- [ ] CloudWatch alarms for scheduled-condition processor (recalibrated for 15-min interval): ≥1 failure in 30min; processed-items > 100/tick for 2 ticks; 0 invocations in 60min
+- [ ] Implement `retention_cleanup_processor` Lambda (Architecture B) in `api-dynamo/src/lambdas/retention_cleanup_processor/`
+  - [ ] EventBridge rule `cron(0 3 * * ? *)` (daily 03:00 UTC)
+  - [ ] Memory 512 MB, timeout 900s (Lambda max), ARM64
+  - [ ] Closed care reports >90d → batch-delete + audit
+  - [ ] Deleted-account PII scrub >30d → hard-delete + audit
+  - [ ] S3 photo orphan sweep (paginated S3 list + parent-existence DynamoDB check)
+  - [ ] Magic-link belt-and-suspenders cleanup (`PK begins_with MLT#` AND `ttl < now-300s`)
+- [ ] Add `CareReportDeletionAudit` and `PIIDeletionAudit` entity types to `traillens_db`
+- [ ] Add 3 access patterns AP-RC01 (closed-care-report cleanup), AP-RC02 (deleted-user PII scrub), AP-RC03 (photo orphan parent-existence check) to `ACCESS_PATTERNS.md`
+- [ ] CloudWatch alarms for retention cleanup: Lambda failure → page; processed-count = 0 for 7 consecutive days → likely silent broken state
+- [ ] Implement Pulumi `EventBridgeScheduledLambda` ComponentResource in `infra/` (EventBridge Rule + Target + Lambda IAM role + CloudWatch log group with 30-day retention) — used by both new Lambdas
+
+### TrailPulse (Full Backend per Section 10)
+
+- [ ] Implement 9 entity types in `traillens_db` (NOT 10 — `TrailConditions` and `RideEvents` dropped per privacy-first redesign): `AdditionalQuestions`, `TrailSystemRideCount`, `RideCompletion`, `FeedbackResponses`, `UserPreferences`, `QuestionResponseTracker`, `TrailSystemGeofences`, `CrewMembers`, `FeedbackDeletionAudit`
+- [ ] Implement 25 endpoints (5 mobile + 2 web + 8 admin-config + 10 admin-feedback) under sub-tags `trailpulse-mobile`, `trailpulse-web`, `trailpulse-admin-config`, `trailpulse-admin-feedback`
+- [ ] Implement `PUT /api/trailpulse/trail-systems/{ts_id}/ride-completion` with idempotency via client-uuid `ride_id` (single-partition TransactWrite: `Put RIDECOMPLETION#{ride_id}` with `attribute_not_exists` + `Update RIDECOUNT#{today}` with `ADD total_rides :one`)
+- [ ] Implement mobile-local post-ride feedback notification (Android `NotificationCompat` + `NotificationManagerCompat`) — NOT a server-side push. Channel `trailpulse_post_ride`; deeplink `traillens://feedback/{ride_id}`; `POST_NOTIFICATIONS` runtime permission on Android 13+
+- [ ] Add 27 access patterns AP-TP01–AP-TP27 to `ACCESS_PATTERNS.md` (one per query type for each of the 9 entity types) — Status: IMPLEMENTED ❌ initially
+- [ ] Document the two design-overlap decisions: (a) feedback config references `catalog_id`s (no standalone `TrailConditions` entity); (b) `/feedback` and `/observations` both kept (UNION on read for admin dashboards)
+
+### Other openapi.json Changes (Categories 1–4)
+
+- [ ] Add `GET /api/users/me` to openapi.json (currently missing — sync gap; route exists in `routes/users.py:90`)
+- [ ] Add `PUT /api/users/me` to openapi.json (currently missing — sync gap; route exists in `routes/users.py:113`)
+- [ ] Add `POST /api/users/me/export-data` route (Phase 4.2) + access pattern AP-U15
+- [ ] Add `POST /api/users/me/delete-account` route (Phase 4.3) + access pattern AP-U16
+- [ ] Add `GET /api/care-reports/{id}/activity` aggregate-on-read endpoint + access pattern AP-CR14
+- [ ] Add 3 subscriptions routes under existing `users` tag: `POST /api/users/me/subscriptions`, `GET /api/users/me/subscriptions`, `DELETE /api/users/me/subscriptions/{trailsystem_id}`
+- [ ] Add `is_public: bool` (default `false`) to care-report request and response schemas in openapi.json
+- [ ] Add `is_public: bool` to `CareReportEntity` Pydantic model in `routes/care_reports.py`
+- [ ] Add `is_public: bool` to `CareReportEntity` in `traillens_db`
+- [ ] Implement visibility-gating semantics in `care_reports_service.py`: `is_public=true` visible to any authenticated user; `is_public=false` only to org members
+- [ ] Add `maxItems: 5` to care-report photo upload request schema in openapi.json
+- [ ] Add `maxItems: 5` to care-report response `photos` array in openapi.json
+- [ ] Add server-side photo-cap enforcement in `care_reports_service.py` (HTTP 400 if request would exceed 5)
+- [ ] Rewrite notification preferences as 2-axis matrix `{ channels, events: { event_type: { email, sms, push } } }` in openapi.json `NotificationPreferences` schema
+- [ ] Itemise the 6 event types in planning Task 10.5 (`condition_change`, `care_report_created`, `care_report_assigned`, `care_report_comment`, `scheduled_condition_reminder`, `observation_received`)
+- [ ] Rewrite `notifications_service.py` to evaluate the per-event-type per-channel matrix at dispatch time
+- [ ] Add 8 analytics routes under new tag `analytics` (overview, trail-systems, care-reports, users, activity-feed, export, condition-history per ts, views per ts) + AP-AN01–AP-AN08 access patterns
+- [ ] Bump `info.version` in openapi.json from `1.1.3` to `2.0.0` (MAJOR — breaking URL renames)
+- [ ] Rename `/api/devices` → `/api/users/me/devices` (and `/{device_id}` variant) in openapi.json + `routes/devices.py`
+- [ ] Rename `/api/users/phone/verify`, `/api/users/phone/confirm` → `/api/users/me/phone/verify`, `/api/users/me/phone/confirm` in openapi.json + `routes/users.py:258, 318`
+- [ ] Rename `/api/organizations/{org_id}/tags/condition` (+`/{tag_id}`) → `/api/organizations/{org_id}/condition-tags` (+`/{tag_id}`) in openapi.json + `routes/tags.py` + `traillens_db.repositories.condition_tag` URL constants
+
+### Embedded openapi.json Sync (Both REST Client Libs)
+
+- [ ] Replace `webui/packages/jsrestapi/docs/openapi.json` with the updated `api-dynamo/docs/openapi.json`
+- [ ] Regenerate TypeScript types via `@hey-api/openapi-ts` in `webui/packages/jsrestapi`
+- [ ] Add new service facades to `webui/packages/jsrestapi`: `ConditionCatalogService`, `AnalyticsService`, `TrailPulseMobileService`, `TrailPulseWebService`, `TrailPulseAdminConfigService`, `TrailPulseAdminFeedbackService`
+- [ ] Replace `androidrestapi/docs/openapi.json` with the updated `api-dynamo/docs/openapi.json`
+- [ ] Regenerate Kotlin services in `androidrestapi/lib`
+- [ ] Add the same 6 new service facades (Kotlin equivalents) to `androidrestapi`
+- [ ] Add CI step in `androidrestapi/CI_INTEGRATION.md` to validate `androidrestapi/docs/openapi.json` matches `api-dynamo/docs/openapi.json` (file equality check) before running codegen — prevents future drift
+
+---
+
 **Prepared by:** AI Assistant per CEO Directive
 **Last Updated:** 2026-01-17
 **Status:** Ready for execution (no shortcuts, work 24/7 until complete)

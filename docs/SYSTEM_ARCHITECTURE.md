@@ -169,24 +169,29 @@ The diagram above shows the complete system architecture including all client ap
 
 ### 3. Lambda Functions (Python 3.14, ARM64 Graviton2)
 
-All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/` repository deploys **no Lambda functions** — it creates only shared infrastructure (DynamoDB, S3, Cognito, SNS, SES domain, API Gateway master) consumed via Pulumi StackReference.
+All Lambda functions are owned and deployed by application repositories (`api-dynamo/pulumi/` and `facebook-api/pulumi/`). The `infra/` repository deploys **no Lambda functions** — it creates only shared infrastructure (DynamoDB, S3, Cognito, SNS, SES domain, API Gateway master) consumed via Pulumi StackReference. This is verified at `infra/pulumi/__main__.py:16` ("Lambda functions are deployed from application repositories").
 
-| Lambda | Memory | Trigger | Purpose |
-|--------|--------|---------|---------|
-| `api-dynamo` | 512MB | API Gateway | Main FastAPI REST API (Mangum adapter) |
-| `push-notification` | 256MB | SNS: TRAIL_CONDITION_CHANGE | Push notifications to iOS (APNS) / Android (FCM) |
-| `sms-notification` | 256MB | SNS: critical severity | SMS alerts via SNS |
-| `email-notification` | 256MB | SNS: TRAIL_CONDITION_CHANGE | Email alerts via SES templates |
-| `photo-processor` | 1024MB | S3: photo uploads | Resize to thumbnail/medium/large WebP variants |
-| `email-forwarder` | 256MB | SES receipt rules | Forward incoming emails per YAML config |
-| `define-auth-challenge` | 256MB | Cognito trigger | Determines CUSTOM_AUTH challenge type (magic link) |
-| `create-auth-challenge` | 256MB | Cognito trigger | Generates magic link token, stores in DynamoDB, sends via SES |
-| `verify-auth-challenge` | 256MB | Cognito trigger | Validates magic link token, marks as used |
-| `post-authentication` | 256MB | Cognito trigger | Logs auth events post sign-in |
+**Deployment-package count: 9** (up from 7). Note that "deployment package" is distinct from "`aws.lambda.Function` resource" — a single deployment package such as `cognito-triggers` contains multiple handlers (`define_auth_challenge`, `create_auth_challenge`, `verify_auth_challenge`, `post_authentication`) and produces multiple `aws.lambda.Function` resources in `api-dynamo/pulumi/` from the same ZIP.
 
-**Runtime:** Python 3.14, ARM64 (Graviton2) for all Lambdas.
-**Deployment:** All Lambdas are packaged as ZIP, uploaded to S3, deployed via `api-dynamo/pulumi/`.
-**Monitoring:** CloudWatch log groups, X-Ray tracing, P95 < 200ms / P99 < 500ms targets.
+The 9 deployment packages in `api-dynamo/src/lambdas/`:
+
+| # | Package | Memory | Trigger | Purpose |
+|---|---------|--------|---------|---------|
+| 1 | `api_dynamo` | 512MB | API Gateway `{proxy+}` | Main FastAPI REST API (Mangum adapter) |
+| 2 | `cognito-triggers` (multi-handler) | 256MB each | Cognito triggers | `define_auth_challenge`, `create_auth_challenge` (generates magic-link token + stores in DynamoDB + sends via SES), `verify_auth_challenge`, `post_authentication` |
+| 3 | `notification_email` | 256MB | SNS: `TRAIL_CONDITION_CHANGE` | Email alerts via SES templates |
+| 4 | `notification_sms` | 256MB | SNS: critical severity | SMS alerts via SNS |
+| 5 | `notification_push` | 256MB | SNS: `TRAIL_CONDITION_CHANGE` | Push notifications to iOS (APNS) / Android (FCM) |
+| 6 | `photo_processor` | 1024MB | S3: photo uploads | Resize to thumbnail/medium/large WebP variants |
+| 7 | `email_forwarder` | 256MB | SES receipt rules | Forward incoming emails per YAML config |
+| 8 | **`scheduled_condition_processor`** *(NEW)* | 256MB | EventBridge `cron(0/15 * * * ? *)` (every 15 min) | Single handler does both: (a) GSI4 query for scheduled conditions due to fire, TransactWrite to apply + append history + flip status to APPLIED + SNS publish; (b) GSI4 query for items with reminder window open, dispatch pre-fire reminder push and mark `reminder_sent=true`. |
+| 9 | **`retention_cleanup_processor`** *(NEW)* | 512MB | EventBridge `cron(0 3 * * ? *)` (daily 03:00 UTC) | Closed care-report cleanup → batch-delete + audit log; deleted-account PII scrub; S3 photo-orphan sweep + CloudFront invalidation; belt-and-suspenders magic-link token cleanup. |
+
+`facebook-api` adds one additional Node.js Lambda (Social Media API), deployed from `facebook-api/pulumi/` — not counted in the api-dynamo 9.
+
+**Runtime:** Python 3.14, ARM64 (Graviton2) for all api-dynamo Lambdas.
+**Deployment:** All Lambdas are packaged as ZIP, uploaded to S3, deployed via the owning application repo's Pulumi stack (never from `infra/`).
+**Monitoring:** CloudWatch log groups (30-day retention), X-Ray tracing, P95 < 200ms / P99 < 500ms targets.
 
 ### 4. Authentication & Authorization
 
@@ -194,10 +199,10 @@ All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/
 - **Purpose:** User authentication and identity management
 - **Custom Domain:** `auth.dev.traillenshq.com` (dev), `auth.traillenshq.com` (prod)
 - **Tier:** ESSENTIALS (supports WebAuthn + EMAIL_OTP)
-- **Authentication Methods** (ALL REQUIRED for MVP v1.13):
-  - **Native WebAuthn Passkey**: Touch ID, Face ID, security keys via Cognito Native WebAuthn (USER_AUTH flow + WEB_AUTHN challenge). No custom backend — client-side Cognito SDK handles registration and authentication.
-  - **Magic Link**: Email-based passwordless login (15-minute expiration link via AWS SES + CUSTOM_AUTH triggers)
-  - **Email/Password**: Traditional authentication with MFA enforcement for admin roles (7-day grace period)
+- **Authentication Methods (THREE methods, all terminating at Cognito; api-dynamo issues no auth tokens of its own):**
+  1. **Native WebAuthn Passkey** (primary): Touch ID, Face ID, security keys via Cognito Native WebAuthn (USER_AUTH flow + WEB_AUTHN challenge). Client-side via Cognito SDK; no custom backend, no api-dynamo route.
+  2. **Magic Link** (primary, passwordless): Cognito CUSTOM_AUTH flow → `cognito-triggers/create_auth_challenge.py` Lambda generates a 256-bit URL-safe token, persists it in DynamoDB single-table (`PK=MLT#{token}`, 10-minute TTL), and emails the link via AWS SES. The user clicks the link → frontend extracts the token → frontend calls `POST /api/auth/magic-link/lookup-token` (api-dynamo's only role: token → email lookup) → client calls `Cognito.RespondToAuthChallenge(ANSWER=token)` → `verify_auth_challenge.py` validates → Cognito issues tokens. Reference: `api-dynamo/src/lambdas/cognito-triggers/src/cognito_triggers/create_auth_challenge.py`.
+  3. **Password (backup, USER_SRP_AUTH)**: Cognito-direct via the SDK (Secure Remote Password — password never traverses the wire in plaintext). No api-dynamo route. **No account creation by password** — `infra/pulumi/components/auth.py:230-231` already sets `admin_create_user_config=...UserPoolAdminCreateUserConfigArgs(allow_admin_create_user_only=True)`, blocking self-signup. **No `/auth/forgot-password` endpoint in api-dynamo** — deferred to webui Phase 11 (uses Cognito `ForgotPassword`/`ConfirmForgotPassword` directly). The 12+ char password policy is already configured at `infra/pulumi/components/auth.py:218-224`. On mobile (androiduser, androidadmin) the password login screen is exposed **only in DEBUG builds**, behind a hidden trigger; production builds expose only passkey + magic-link.
 - **MFA Configuration:** OPTIONAL at Cognito level. Enforced at FastAPI middleware level for org-admin, trailsystem-owner, and superadmin roles (7-day grace period). WebAuthn passkeys are inherently multi-factor and satisfy MFA requirements.
 - **FactorConfiguration:** `MULTI_FACTOR_WITH_USER_VERIFICATION` — set via `set-cognito-mfa-config.py` boto3 script on every `pulumi up` (idempotent). Required to allow MFA-enabled admins to use passkeys.
 - **WebAuthn Configuration:** `relying_party_id=traillenshq.com`, `user_verification=preferred`
@@ -221,6 +226,19 @@ All Lambda functions are owned and deployed by `api-dynamo/pulumi/`. The `infra/
   - `content-moderator`: Content moderation
   - `org-member`: Basic organization member
 - **Email Integration:** Uses Amazon SES for sending (no 50/day limit)
+
+#### **Cognito Threat Protection Enablement (REQUIRED — not yet enabled)**
+
+Reference: [AWS Cognito Threat Protection developer guide](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-threat-protection.html).
+
+Verified by direct read of `infra/pulumi/components/auth.py:213-239`: there is **no `user_pool_add_ons` block** today, and the pool is currently on the `ESSENTIALS` tier (`auth.py:202`). Threat Protection (formerly Advanced Security) is required for MVP and queued for the implementation plan:
+
+1. **Tier upgrade:** raise `user_pool_tier` from `ESSENTIALS` → `PLUS`. Threat Protection is gated to the PLUS tier; ESSENTIALS does not support it. The per-MAU price delta should be documented for transparency before merge (absolute cost is small at <500 MAU).
+2. **Add the `user_pool_add_ons` block:** `user_pool_add_ons=aws.cognito.UserPoolUserPoolAddOnsArgs(advanced_security_mode="AUDIT")` initially (per AWS guidance: run audit mode for 2+ weeks before enabling enforcement). Promote to `"ENFORCED"` after the soak window AND after configuring per-risk-level responses.
+3. **Adaptive-auth response policy:** low risk → allow; medium risk → require MFA challenge; high risk → block.
+4. **Caveat — compromised-credentials check works ONLY on `USER_PASSWORD_AUTH`, NOT on `USER_SRP_AUTH`** (per AWS Threat Protection "Key Limitations"). Adaptive risk-scoring works on both flows. The password backup flow above uses SRP, which keeps the password off the wire but forfeits the compromised-credentials check. Implementation-plan decision: (i) accept the trade-off and rely on the 12-char + complexity policy, OR (ii) switch the password backup flow to `USER_PASSWORD_AUTH` to gain the check (deviates from existing webui SRP flow). Magic-link and passkey flows are unaffected.
+5. **Threat Protection does NOT provide rate-limiting.** Volumetric / brute-force protection requires AWS WAF rules on the Cognito endpoint or on API Gateway. WAF work is queued for the implementation plan (separate from Threat Protection enablement).
+6. **Account recovery:** no explicit `account_recovery_setting` is configured today; default Cognito behaviour applies. This is intentional and acceptable because the MVP does **not** offer forgot-password (per the password-backup auth section above). Documented here so the gap is recognised as deliberate, not accidental.
 
 ### 5. Data Layer
 
@@ -247,6 +265,28 @@ All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using co
 | `GSI6PK` / `GSI6SK` | String | Geohash-based geospatial index (map bounds trail queries) |
 | `ttl` | Number | TTL — automatic item expiration (used for tokens, temp data) |
 
+**GSI overloading by entity type:**
+
+Each GSI is intentionally overloaded — different entity types write distinct partition-key prefixes into the same physical index, and they never collide because the prefix uniquely identifies the entity type.
+
+**GSI1 partition patterns (post-this-pass):**
+
+| GSI1PK pattern | GSI1SK pattern | Owner / purpose |
+|----------------|----------------|-----------------|
+| `ORG#{org_id}` | (varies) | Org-member queries (existing) |
+| `USER#{user_id}` | (varies) | User-centric queries (existing) |
+| `EMAIL#{email_lc}` | (varies) | Magic-link rate-limit query, written by Cognito-trigger `create_auth_challenge.py` `_is_rate_limited` (existing) |
+| `ORG#{org_id}#CATALOG#ACTIVE` | `USAGE#{usage_count_zero_padded}#CATALOG#{catalog_id}` | **NEW** — list active condition-catalog entries by org, sorted by usage count (Section "Condition Catalog" in `CONDITION_CATALOG.md`) |
+
+**GSI4 (NEW) — Scheduled-condition processor index:**
+
+| Key | Pattern | Notes |
+|-----|---------|-------|
+| `GSI4PK` | `SCHEDULED#{status}` | `status` ∈ {`PENDING`, `APPLIED`, `CANCELLED`} |
+| `GSI4SK` | `scheduled_at_iso8601` | Lexicographic sort = chronological sort for ISO-8601 |
+
+The new `scheduled_condition_processor` Lambda (see "Event-Driven Processing" below) queries `GSI4PK = SCHEDULED#PENDING` with `GSI4SK <= now+15min` to find scheduled-condition items due to fire in the next 15-minute window. When `status` flips to `APPLIED` or `CANCELLED`, the item moves to a different `GSI4PK` partition and is no longer returned by the PENDING query — there is no separate "processed" flag to maintain.
+
 **Entity Key Pattern Examples:**
 
 | Entity | PK | SK |
@@ -254,11 +294,22 @@ All entities share a single DynamoDB table (`traillens-{env}-dynamodb`) using co
 | Trail system | `TRAILSYSTEM#{id}` | `METADATA` |
 | Trail system (by slug) | `TRAILSYSTEM_SLUG#{slug}` *(GSI1)* | `TRAILSYSTEM#{id}` |
 | User profile | `USER#{cognito_sub}` | `PROFILE` |
-| Magic link token | `MAGICLINK#{token}` | `TOKEN` |
+| Magic link token | `MLT#{token}` | `METADATA` |
 | Device registration | `USER#{id}` | `DEVICE#{device_id}` |
 | Condition observation | `TRAILSYSTEM#{id}` | `OBS#{timestamp}` |
 | Care report | `CAREREPORT#{id}` | `METADATA` |
 | Organization member | `ORG#{org_id}` *(GSI5)* | `USER#{user_id}` |
+| Condition catalog entry | `ORG#{org_id}` | `CATALOG#{catalog_id}` |
+| **Tag** (unified, all `tag_type` values) | `ORG#{org_id}` | `TAG#{tag_type}#{tag_id}` |
+| **Tag config** (per-org cap override) | `ORG#{org_id}` | `TAG_CONFIG#{tag_type}` |
+
+**Entity-type count (single-table overlay): 17 base + 9 TrailPulse = 26 entity types.**
+
+The 17 base entity types include the existing 16 MVP entities plus the new `ConditionCatalogEntry` (org-scoped catalog of preset conditions; reuses the unified `Tag` entity with `tag_type=CONDITION` and is referenced by per-trail-system feedback configuration in TrailPulse).
+
+**Tag Architecture (decided 2026-04-26):** The previously separate `ConditionTag` and `CareReportTypeTag` entities are unified into **one `Tag` entity discriminated by `tag_type`** (current values: `CONDITION`, `CARE_REPORT_TYPE`; the discriminator is open for extension). All tag flavors share the same identical schema (`tag_id`, `org_id`, `tag_type`, `name`, `description`, `color`, `is_active`, `created_at`, `updated_at`, `created_by_user_id`, `version`). Per-org caps are configurable via the new `TagConfig` entity. The merge of two entities into one (`-1`) plus the addition of `TagConfig` (`+1`) leaves the entity-type count unchanged at **26**. Type-specific URLs (`/condition-tags`, `/care-report-tags`) front a single shared service/repository — the discriminator is a backend implementation detail. Adding a new tag type requires no new entity, no new repository, and no new GSI: only a new `tag_type` enum value, a default cap constant, a route module, and a doc row.
+
+The 9 TrailPulse entities (per Phase 7.5/15.1 in `MVP_PROJECT_PLAN.md`) are: `AdditionalQuestions`, `TrailSystemRideCount`, `RideCompletion`, `FeedbackResponses`, `UserPreferences`, `QuestionResponseTracker`, `TrailSystemGeofences`, `CrewMembers`, `FeedbackDeletionAudit`. `TrailConditions` is dropped (the Condition Catalog supersedes it — per-trail-system feedback config references `catalog_id`s instead). `RideEvents` is dropped per the privacy-first redesign — the backend never sees per-user ride history; only anonymous per-trail-system aggregates (`TrailSystemRideCount`) and a short-lived idempotency marker (`RideCompletion`) are stored.
 
 **Access Patterns:** 66 defined patterns — full spec in `api-dynamo/docs/dynamodb-spec.json`
 
@@ -394,7 +445,7 @@ Infrastructure and application code deploy independently via separate Pulumi sta
 | Repository | Deploys |
 |------------|---------|
 | `infra/` | VPC + networking, DynamoDB table, S3 buckets, Cognito user pool, API Gateway (master), SNS topics, SES domain identity, Secrets Manager, CloudFront, Route53, ACM, CloudWatch alarms |
-| `api-dynamo/` | All 10 Lambda functions, API routes attached to master gateway (via StackReference) |
+| `api-dynamo/` | All Lambda deployment packages (**9 packages** — see Section 3 for the inventory; note `cognito-triggers` is one package containing multiple `aws.lambda.Function` resources), API routes attached to master gateway (via StackReference) |
 | `webui/` | AWS Amplify app (React 19, Tailwind 4.x) |
 
 **Deployment Order:** `infra/` → `api-dynamo/` → `webui/`
@@ -459,6 +510,39 @@ Infrastructure and application code deploy independently via separate Pulumi sta
   - Linked Facebook Page
 - **Rate Limits:** 200 calls/hour per user token
 - **Multi-Tenant:** Each organization has separate Instagram Business Account
+
+### 11. Event-Driven Processing
+
+Periodic and event-triggered work runs as scheduled Lambdas (EventBridge rules → Lambda → DynamoDB / SNS / S3) and as inline atomic writes inside hot-path API requests. Cross-link: full reference in `api-dynamo/docs/BACKGROUND_WORKERS.md` (created in this docs pass) — see "Background Workers" cross-link below.
+
+**Scheduled (EventBridge → Lambda):**
+
+| EventBridge schedule | Target Lambda | Side effects |
+|----------------------|---------------|--------------|
+| `cron(0/15 * * * ? *)` (every 15 min) | `scheduled_condition_processor` | DynamoDB GSI4 query (`GSI4PK=SCHEDULED#PENDING`); TransactWrite to apply scheduled condition + append history + flip status to APPLIED; SNS publish to `TRAIL_CONDITION_CHANGE`. Second pass on the same invocation: GSI4 query for items in their reminder window → push reminder via existing `notification_push` Lambda → mark `reminder_sent=true`. User-facing accuracy: ±15 minutes of the scheduled time. |
+| `cron(0 3 * * ? *)` (daily 03:00 UTC) | `retention_cleanup_processor` | Closed care-report cleanup (90+ days old) → batch-delete + write `CareReportDeletionAudit`; deleted-account PII scrub (`deleted_at < now-30d`) → hard-delete user items + audit `PIIDeletionAudit`; S3 photo orphan sweep → S3 `DeleteObject` + CloudFront invalidation; belt-and-suspenders magic-link token cleanup. |
+
+**Inline (NOT a separate Lambda — atomic single-partition TransactWrite inside an API request):**
+
+- `PUT /api/trailpulse/trail-systems/{ts_id}/ride-completion` performs a single-partition TransactWrite on `PK=TRAILSYSTEM#{ts_id}`: (a) `Put RIDECOMPLETION#{ride_id}` with `ConditionExpression: attribute_not_exists(SK)` for idempotency; (b) `Update RIDECOUNT#{YYYY-MM-DD} ADD total_rides :one`. **No `usage_aggregator` Lambda is needed** — the rollup is computed inline as part of the write. Daily aggregates retained 3 years (1095-day TTL); idempotency markers retained 30 days.
+
+**Mobile-local (NOT server-side — fired by the Android client, no backend involvement):**
+
+- The post-ride feedback notification is dispatched on-device by the Android app's `NotificationCompat` / `NotificationManagerCompat` when the GPS-foreground-service geofence detects ride-end. The backend has **no SNS topic** for this event and runs **no dispatcher Lambda** for it. `POST /api/trailpulse/feedback` is the only related backend call (a pure data write — no notification side-effect). Rationale: < 50ms latency vs FCM round-trip, $0 cost, fires immediately even when offline, and only the on-ride device receives it (correct UX). iOS will mirror this via `UNUserNotificationCenter` post-MVP.
+
+**Pulumi component:** the `infra/` repository will gain an `EventBridgeScheduledLambda` ComponentResource (queued for the implementation plan) that provisions, per scheduled Lambda: the EventBridge Rule + Target, the Lambda IAM role with least-privilege table/SNS access, and a CloudWatch log group with 30-day retention. Both new Lambdas use the same component pattern.
+
+**Cost projections at 100K DAU (per-Lambda, monthly):**
+
+- `scheduled_condition_processor`: 96 invocations/day × 30 days = **2,880 invocations/month**, ~50 ms avg = 2.4 GB-s/month → **~$0.00** (well inside Lambda free tier; ~3× cheaper than a 5-minute schedule).
+- `retention_cleanup_processor`: 30 invocations/month × ~5 min × 512 MB = **4.6 GB-min/month** → **~$0.00** (free tier).
+
+**CloudWatch alarms (recalibrated for 15-min cron interval):**
+
+- `scheduled_condition_processor`: (a) ≥ 1 invocation failure in 30 min (catches a single failure on the next-tick retry — a missed fire = a missed user-visible condition update); (b) `processed-items-count > 100` for 2 consecutive ticks → indicates queue buildup or a stuck cursor; (c) 0 invocations in 60 min → indicates EventBridge rule misconfigured or disabled.
+- `retention_cleanup_processor`: Lambda failure → page; processed-count = 0 for 7 consecutive days → likely silent broken state.
+
+**Background Workers cross-reference:** see `api-dynamo/docs/BACKGROUND_WORKERS.md` (NEW — created in this docs pass) for the per-Lambda reference covering triggers, access patterns (AP-SC04–06, AP-RC01–03), idempotency guarantees, alarm thresholds, and cost. `api-dynamo/docs/API_DESIGN.md` includes a "Background Workers" section that links here.
 
 ---
 

@@ -143,7 +143,7 @@ This document provides a comprehensive implementation plan for **TrailLensHQ MVP
 
 **1. Trail System Management**
 - Trail system CRUD (create, read, update, delete)
-- Real-time status updates with tag-based organization (max 10 tags per org)
+- Real-time status updates with tag-based organization (max 20 tags per org)
 - Status history with 2-year retention
 - Scheduled status changes with automated cron processing
 - Bulk operations
@@ -1609,163 +1609,85 @@ pulumi up --stack dev
 
 ---
 
-### Task 3.3: Implement Magic Link Authentication
+### Task 3.3: Implement Magic Link Authentication (Cognito Custom-Auth, NOT a REST route)
 
-**Objective**: Enable email-based passwordless login with 15-minute expiration clickable links
+**Objective**: Enable email-based passwordless login with 10-minute expiration clickable links via Cognito Custom-Auth flow.
 
-**Research Completed**: AWS Cognito has native EMAIL_OTP support (6-digit code sent via email) as of November 2024, but NOT native magic link support (clickable link). Magic links require custom implementation using Custom Authentication Flow with Lambda triggers.
+**ARCHITECTURE CORRECTION (docs-mvp-backend-features pass)**: The previously-claimed `POST /auth/magic-link/send` and `POST /auth/magic-link/verify` REST endpoints **do not exist** and **must not be added**. The "send" path is owned end-to-end by **Cognito Custom-Auth + the `cognito-triggers/create_auth_challenge.py` Lambda** (515 lines, verified). api-dynamo's only role in the magic-link flow is the single token-lookup endpoint.
 
-**Decision**: Implement custom magic links instead of native EMAIL_OTP for better user experience (click link vs. copy/paste code).
+**Verified end-to-end flow** (line citations refer to `api-dynamo/src/lambdas/cognito-triggers/src/cognito_triggers/create_auth_challenge.py`):
 
-**Key References**:
+1. Client calls `Cognito.InitiateAuth(AuthFlow=CUSTOM_AUTH, AuthParameters={USERNAME: email})` directly via the Cognito SDK (no api-dynamo route).
+2. Cognito invokes `create_auth_challenge.lambda_handler` (L426).
+3. Lambda checks user existence (`_check_user_exists`, L117).
+4. Silent-failure gate when `ALLOW_NEW_USERS=false` (L382).
+5. Rate-limit check on GSI1 `EMAIL#{email_lc}` partition (`_is_rate_limited`, L138) — 60-second window.
+6. Generate 256-bit URL-safe token (`_generate_token`, L112).
+7. Send templated email via SES with `{FRONTEND_URL}/auth/verify-magic-link?token={token}` (`_send_magic_link_email`, L221).
+8. Store token in DynamoDB single-table (`PK=MLT#{token}`, `SK=METADATA`, `GSI1PK=EMAIL#{email_lc}`, 10-minute TTL) (`_store_token`, L183).
+9. User clicks email link → frontend extracts token → calls `POST /api/auth/magic-link/lookup-token` — **THIS is api-dynamo's only role: token → email lookup**.
+10. Client then calls `Cognito.RespondToAuthChallenge(ANSWER=token)` → `verify_auth_challenge.py` checks → Cognito issues access + refresh + ID tokens.
 
-- [AWS Cognito Passwordless Authentication Announcement](https://aws.amazon.com/about-aws/whats-new/2024/11/amazon-cognito-passwordless-authentication-low-friction-secure-logins/)
-- [AWS Sample: Custom Magic Link Implementation](https://github.com/aws-samples/amazon-cognito-passwordless-auth/blob/main/MAGIC-LINKS.md)
-- [Implementing Magic Links with Cognito Guide](https://theburningmonk.com/2023/03/implementing-magic-links-with-amazon-cognito-a-step-by-step-guide/)
-- [AWS Blog: Passwordless Email Authentication](https://aws.amazon.com/blogs/mobile/implementing-passwordless-email-authentication-with-amazon-cognito/)
+**Files involved (verified)**:
+- `api-dynamo/src/lambdas/cognito-triggers/src/cognito_triggers/create_auth_challenge.py` — owns the entire send path (rate-limit, token generation, SES dispatch, DynamoDB write).
+- `api-dynamo/src/lambdas/cognito-triggers/src/cognito_triggers/verify_auth_challenge.py` — verifies the token and marks it used during `RespondToAuthChallenge`.
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/auth.py` — exposes **only** `POST /api/auth/magic-link/lookup-token` (frontend → email lookup); no `/send` and no `/verify`.
 
-**Implementation Approach**: Custom implementation storing tokens in DynamoDB + AWS SES for email delivery + custom verification endpoint.
+**Implementation Steps (this docs pass — no code changes)**:
 
-**Alternative Considered**: Native EMAIL_OTP (requires user to copy/paste 6-digit code, less convenient than clickable link).
-
-**Files to Modify**:
-- `api-dynamo/auth/magic_link.py` (new file for magic link generation)
-- `api-dynamo/routes/auth.py` (magic link endpoints)
-- `webui/src/features/auth/pages/Login.tsx` (magic link login option)
-- `webui/src/features/auth/pages/MagicLinkVerify.tsx` (new page for link verification)
-
-**Implementation Steps**:
-
-**Backend (API)**:
-1. Create DynamoDB table `magic_link_tokens` (or reuse existing auth tokens table):
-   - PK: token (UUID)
-   - Attributes: user_email, expires_at, used (boolean)
-2. Implement `/auth/magic-link/send` endpoint:
-   - Validate email format
-   - Check if user exists in Cognito
-   - Generate secure random token (UUID v4)
-   - Store token in DynamoDB with 15-minute expiration
-   - Send email via AWS SES with magic link
-   - Email subject: "Your TrailLensHQ Login Link"
-   - Email body: "Click here to login: https://app.traillenshq.com/auth/verify?token=..."
-3. Implement `/auth/magic-link/verify` endpoint:
-   - Validate token exists and not expired
-   - Verify token not already used
-   - Mark token as used
-   - Issue Cognito JWT tokens
-   - Return access token and refresh token
-
-**Frontend (Web)**:
-1. Add "Email me a magic link" option to login page
-2. Implement magic link send flow:
-   - User enters email address
-   - Call `/auth/magic-link/send`
-   - Show success message: "Check your email for login link"
-3. Create `/auth/verify` page:
-   - Extract token from URL query parameter
-   - Call `/auth/magic-link/verify` with token
-   - Store tokens in localStorage
-   - Redirect to dashboard
-4. Handle error cases:
-   - Token expired: Show message with "Request new link" button
-   - Token already used: Show message with "Request new link"
-   - Invalid token: Show error message
-
-**Email Template**:
-```
-Subject: Your TrailLensHQ Login Link
-
-Hi there,
-
-Click the link below to sign in to TrailLensHQ:
-
-https://app.traillenshq.com/auth/verify?token={token}
-
-This link expires in 15 minutes and can only be used once.
-
-If you didn't request this link, you can safely ignore this email.
-
----
-TrailLensHQ
-Building communities, one trail at a time.
-```
-
-**Testing**:
-- Request magic link for existing user
-- Verify email received
-- Click link and verify automatic login
-- Test link expiration (wait 15 minutes or manually expire)
-- Test link reuse (should fail on second click)
-- Test invalid token
-- Test for non-existent email
+1. Confirm `routes/auth.py` exposes `POST /api/auth/magic-link/lookup-token` and **only** that magic-link route.
+2. Confirm openapi.json contains the lookup-token route and **does not** contain `/auth/magic-link/send` or `/auth/magic-link/verify`.
+3. Cross-check `ACCESS_PATTERNS.md` AP-A08–AP-A10 use the actual `MLT#{token}` PK (not the stale `MAGIC_LINK#{token}`); add AP-A11 for the GSI1 `EMAIL#{email_lc}` rate-limit query.
 
 **Acceptance Criteria**:
-- Magic link sent via email successfully
-- Link login functional within 15 minutes
-- Expired links rejected with clear error
-- Used links cannot be reused
-- Email template professional and clear
-- Error handling graceful
+- No api-dynamo REST endpoint for `/send` or `/verify` (Cognito-direct).
+- `POST /api/auth/magic-link/lookup-token` documented in openapi.json under tag `auth`.
+- Token storage uses `PK=MLT#{token}`, 10-minute TTL.
+- 60-second rate-limit per email enforced via GSI1.
+- Sequence diagram added to `planning/docs/SYSTEM_ARCHITECTURE.md` (auth section) covering the 10 verified steps.
 
-**AI-Assisted Timeline**: 8-10 hours
+**AI-Assisted Timeline**: 0 hours additional code in this docs pass; audit + sequence-diagram drafting only.
 
 ---
 
-### Task 3.4: Update Email/Password Authentication
+### Task 3.4: Email/Password Authentication (Backup-Only via Cognito SRP, NO Signup, NO Forgot-Password)
 
-**Objective**: Enhance existing email/password authentication with 12+ char minimum, complexity requirements, and 6-password history
+**Objective**: Provide email + password as a **backup** authentication method alongside passkey and magic-link. Per docs-mvp-backend-features pass: NO account creation by password, NO forgot-password endpoint in api-dynamo.
 
-**Research Completed**: AWS Cognito supports password reuse prevention via `PasswordHistorySize` parameter (range: 0-24 passwords). This feature is available in Essentials and Plus tiers (we're using dev which has this). Cognito stores password hashes (not plaintext) with user-specific salts for security.
+**Wire protocol**: Cognito `USER_SRP_AUTH` (Secure Remote Password). Client talks **directly to Cognito** (same pattern as passkey and magic-link's challenge response). No api-dynamo route. Password never sent in plaintext to the network.
 
-**Key References**:
+**Verified existing infra config (no infra change needed for these constraints)**:
 
-- [Password Reuse Prevention Documentation](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-advanced-security-password-reuse.html)
-- [PasswordPolicyType API Reference](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_PasswordPolicyType.html)
-- [AWS Blog: Password Security Improvements](https://builder.aws.amazon.com/content/2kItyzuwvmbvwgIi8OG2DrOAzAe/improving-password-security-on-amazon-cognito-with-password-reuse-prevention)
+- **`AllowAdminCreateUserOnly=True`** already set at `infra/pulumi/components/auth.py:230-231`. Self-signup via password is already blocked. New users onboard via magic-link or admin invite.
+- **Password policy already configured** at `infra/pulumi/components/auth.py:218-224`: `minimum_length=12, require_lowercase=True, require_uppercase=True, require_numbers=True, require_symbols=True`. Matches MVP spec.
 
-**Configuration Values**:
+**Required infra changes (queued for implementation plan, NOT this docs pass)**:
 
-- Minimum length: 12 characters (Cognito supports 6-99)
-- Password history: 6 (Cognito supports 0-24, we're using 6)
-- Complexity: uppercase, lowercase, numbers, symbols (all supported natively)
+1. **Upgrade Cognito `user_pool_tier`** from `ESSENTIALS` (`auth.py:202`) → **`PLUS`**. Threat Protection (formerly Advanced Security) is gated to PLUS.
+2. **Add `user_pool_add_ons` block** to the `aws.cognito.UserPool(...)` constructor: `user_pool_add_ons=aws.cognito.UserPoolUserPoolAddOnsArgs(advanced_security_mode="AUDIT")` for the first 2 weeks; promote to `"ENFORCED"` after the soak window. Per [AWS Cognito Threat Protection docs](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-threat-protection.html).
+3. **Configure adaptive-auth response policy**: low risk → allow; medium risk → require MFA; high risk → block.
+4. **Caveat surfaced for implementation plan**: Threat Protection's compromised-credentials check **only runs on `USER_PASSWORD_AUTH`, NOT on `USER_SRP_AUTH`** (per AWS docs). The SRP choice forfeits the compromised-credentials check. Two viable resolutions for the implementation plan to pick: (i) keep SRP, accept the trade-off, rely on the 12-char + complexity policy; (ii) switch the password backup flow to `USER_PASSWORD_AUTH` (password traverses TLS in cleartext) to enable compromised-credentials checking.
+5. **No rate-limiting from Threat Protection**. The earlier "Cognito has built-in lockout after 5 failed attempts" claim was inaccurate — that level of lockout is NOT a Threat Protection feature. AWS WAF rules on the Cognito endpoint or API Gateway are the correct path for volumetric / brute-force protection (queue WAF work for the implementation plan).
 
-**Files to Modify**:
-- `infra/components/cognito.py` (Cognito password policy)
-- `webui/src/features/auth/pages/Register.tsx` (password validation UI)
-- `webui/src/features/auth/pages/ChangePassword.tsx` (update password change flow)
+**Explicit non-goals (MVP)**:
 
-**Implementation Steps**:
+- **NO account creation by password** — `allow_admin_create_user_only=True` enforces this; do not change.
+- **NO forgot-password endpoint in api-dynamo** — Cognito's `ForgotPassword`/`ConfirmForgotPassword` API is **not** offered to clients in the MVP. Webui will add a UI for it later (see Phase 11 deferred task at end of phase). Admins reset via Cognito console or scripts.
+- **NO `/auth/forgot-password` or `/auth/reset-password` REST routes**.
 
-**Cognito Password Policy**:
-1. Update Cognito User Pool password policy:
-   - Minimum length: 12 characters (was 8)
-   - Require uppercase letters: Yes
-   - Require lowercase letters: Yes
-   - Require numbers: Yes
-   - Require symbols: Yes
-   - Password history: 6 (prevent reuse of last 6 passwords)
-2. Deploy updated Cognito configuration
+**Files involved (no code work in this docs pass)**:
 
-**Frontend Validation**:
-1. Update registration form to show password requirements
-2. Add real-time password strength indicator
-3. Show which requirements are met/not met as user types
-4. Display error if password history check fails
+- Existing webui SRP path: `webui/packages/jsrestapi/src/auth/AuthManager.ts` — public surface today is 9 methods; `signInWithSrp` is **NOT yet present** and must be added in the implementation plan.
+- Existing Android SRP path: `androidrestapi/lib/src/main/kotlin/com/traillenshq/api/auth/CognitoAuthApi.kt` — SRP is reachable today via `initiateAuth(authFlow="USER_SRP_AUTH")`; no new method needed.
 
-**Testing**:
-- Create user with weak password (should fail)
-- Create user with strong password (should succeed)
-- Change password to previously used password (should fail with history error)
-- Verify all complexity requirements enforced
+**Acceptance Criteria (docs-only this pass)**:
 
-**Acceptance Criteria**:
-- 12-character minimum enforced
-- Complexity requirements enforced
-- Password history prevents reuse of last 6 passwords
-- UI shows clear password requirements
-- Error messages helpful
+- Task body reflects backup-only SRP architecture.
+- No `/auth/forgot-password` route is referenced anywhere in the MVP plan.
+- Threat Protection enablement queued explicitly (PLUS tier + `advanced_security_mode`).
+- SRP-vs-PASSWORD trade-off captured for the implementation plan to resolve.
 
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 0 hours additional code in this docs pass.
 
 ---
 
@@ -1817,33 +1739,42 @@ Building communities, one trail at a time.
 
 ---
 
-### Task 3.6: Implement Mobile App Authentication
+### Task 3.6: Implement Mobile App Authentication (Production = Passkey + Magic-Link Only; Password = DEBUG Build Only)
 
-**Objective**: Integrate all five authentication methods into mobile apps (Android + iOS)
+**Objective**: Integrate authentication methods into mobile apps. **Production builds expose passkey + magic-link only.** Email/password login screens are **debug-build-only** behind a hidden trigger (per docs-mvp-backend-features pass).
 
-**Files to Modify**:
-- iOS app `AuthenticationManager.swift` (new file)
-- iOS app `LoginView.swift` (login UI)
+**Production-build auth methods (Android user + admin apps)**:
 
-**Implementation Steps**:
-1. Integrate AWS Cognito SDK for iOS
-2. Implement passkey authentication with `ASAuthorizationController`
-3. Implement magic link with deep linking
-4. Implement email/password with Cognito
-5. Store tokens securely in iOS Keychain
-6. Handle token refresh
+1. **Passkey** (WebAuthn via Android Credential Manager API).
+2. **Magic-link** (Cognito Custom-Auth via SDK; deep-link callback into the app).
+
+**Debug-build-only auth method**:
+
+3. **Email + password** (Cognito SRP via SDK). Gated by `BuildConfig.DEBUG`. Hidden entry point (exact UX TBD in implementation plan — candidates: tap-version-7x, long-press-logo, hidden menu item). Production users cannot reach this screen.
+
+**Files involved (no code work in this docs pass)**:
+
+- Existing Android SRP support via `androidrestapi/lib/src/main/kotlin/com/traillenshq/api/auth/CognitoAuthApi.kt` — `initiateAuth(authFlow="USER_SRP_AUTH")` already reachable.
+- iOS deferred per project scope (no iOS work in MVP).
+
+**Implementation Steps (queued for implementation plan, NOT this docs pass)**:
+
+1. Wire passkey + magic-link login screens into the user app and admin app for **all** build types.
+2. Wire password-login screen into both apps **only** under `BuildConfig.DEBUG`. Use Hilt module gating or compose conditional routes — exact pattern TBD.
+3. Hide the password-login screen route + entry trigger when `BuildConfig.DEBUG == false`.
+4. Add the new "Debug-Only Password Login" screen to both apps' MOBILEAPP_SCREENS.md (separate doc task).
 
 **Testing**:
-- Test all five auth methods on Android and iOS
-- Verify Face ID/Touch ID prompts for passkey
-- Test magic link deep linking
-- Verify secure token storage
+
+- Production build: confirm password login screen unreachable.
+- Debug build: confirm password login screen reachable via the hidden trigger.
+- Passkey + magic-link work in both build types.
 
 **Acceptance Criteria**:
-- All five auth methods work on Android and iOS
-- Biometric prompts functional
-- Tokens stored securely
-- Session persistence working
+
+- Production APKs do not expose any password login UX.
+- Debug APKs expose password login behind a hidden trigger.
+- Passkey + magic-link supported in both build types.
 
 **AI-Assisted Timeline**: 12 hours (included in Phase 12 Mobile Apps development)
 
@@ -1949,13 +1880,15 @@ Building communities, one trail at a time.
 
 **Objective**: Allow users to download all their personal data in machine-readable format (GDPR Article 20)
 
+**Canonical endpoint path (docs-mvp-backend-features pass)**: `POST /api/users/me/export-data`. Note: `users` is **plural** per existing convention; `me` segment per the user-scoped pattern (Cat 3 #14/#15 in source plan). New access pattern: **AP-U15** (export-data query across user-scoped entity types).
+
 **Files to Modify**:
-- `api-dynamo/routes/user.py` (add `/user/export-data` endpoint)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/users.py` (add `POST /api/users/me/export-data` endpoint)
 - `webui/src/features/user/pages/Settings.tsx` (add "Download My Data" button)
-- `api-dynamo/services/data_export.py` (new file for export logic)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/services/data_export_service.py` (new file for export logic)
 
 **Implementation Steps**:
-1. Create `/user/export-data` API endpoint (authenticated)
+1. Create `POST /api/users/me/export-data` API endpoint (authenticated)
 2. Query all tables for user's data:
    - User profile (users table)
    - Trail system history (where user_id = current user)
@@ -2009,16 +1942,20 @@ Building communities, one trail at a time.
 
 **Objective**: Allow users to permanently delete their account and all associated data (GDPR Article 17)
 
+**Canonical endpoint path (docs-mvp-backend-features pass)**: `POST /api/users/me/delete-account`. New access pattern: **AP-U16** (mark user `deleted_at = now`).
+
+**Important architectural note**: The actual hard-delete is **NOT performed by this endpoint**. This endpoint marks the account as `deleted_at = now` (soft delete with 30-day grace period). The hard delete + PII scrub is performed by the `retention_cleanup_processor` Lambda 30 days after the `deleted_at` timestamp (see Task 4.4 + Section 11 Architecture B). This separation enables: (a) cancellation during the grace period, (b) batched cleanup at 03:00 UTC daily (lower DynamoDB cost than per-request cascade deletes), (c) audit-logging via `PIIDeletionAudit`.
+
 **Files to Modify**:
-- `api-dynamo/routes/user.py` (add `/user/delete-account` endpoint)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/users.py` (add `POST /api/users/me/delete-account` endpoint)
 - `webui/src/features/user/pages/Settings.tsx` (add "Delete Account" section)
-- `api-dynamo/services/account_deletion.py` (new file)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/services/account_deletion_service.py` (new file — soft-delete only; hard-delete lives in retention_cleanup_processor Lambda)
 
 **Implementation Steps**:
-1. Create `/user/delete-account` API endpoint (authenticated, requires password confirmation)
-2. Implement account deletion logic:
-   - **Soft delete first**: Mark account as `pending_deletion` with 30-day grace period
-   - After 30 days, hard delete all user data:
+1. Create `POST /api/users/me/delete-account` API endpoint (authenticated, requires password / passkey confirmation)
+2. Implement account deletion logic (soft-delete only — hard delete deferred to Lambda):
+   - **Soft delete here**: Mark account as `pending_deletion`, set `deleted_at = now()`, with 30-day grace period
+   - After 30 days, **the `retention_cleanup_processor` Lambda** (Task 4.4 + Section 11 Architecture B) hard-deletes all user data:
      - Remove user from Cognito
      - Delete user record from users table
      - Anonymize trail care reports (replace user_id with "deleted_user")
@@ -2076,27 +2013,50 @@ Email sent: "Your account has been permanently deleted"
 
 ---
 
-### Task 4.4: Create Automated Retention Cleanup Job
+### Task 4.4: Create Automated Retention Cleanup Job (EventBridge → `retention_cleanup_processor` Lambda — Architecture B)
 
-**Objective**: Ensure Lambda function runs reliably on schedule
+**Objective**: Daily background Lambda that performs scheduled cleanups for closed care reports, deleted-account PII scrub, S3 photo orphans, and belt-and-suspenders magic-link tokens. Per docs-mvp-backend-features pass Section 11 Architecture B.
 
-**Files to Modify**:
-- `infra/components/lambda_crons.py` (EventBridge rule)
+**Architecture (verified, source-plan Section 11 Architecture B)**:
 
-**Implementation Steps**:
-1. Create EventBridge rule to trigger Lambda daily at 2 AM UTC
-2. Configure Lambda timeout (15 minutes max)
-3. Configure error handling and retries
-4. Set up CloudWatch alarms for Lambda failures
-5. Add dead letter queue (DLQ) for failed executions
-6. Test scheduled execution
+- **Trigger**: EventBridge scheduled rule, `cron(0 3 * * ? *)` (daily 03:00 UTC).
+- **New Lambda deployment package**: `retention_cleanup_processor` in `api-dynamo/src/lambdas/retention_cleanup_processor/`.
+- **Lambda spec**: Memory **512 MB**, timeout **900 s** (15-min Lambda max — paginate across multiple days or switch to Step Functions if work exceeds), architecture **ARM64** (Graviton2, 20% cheaper).
+
+**Per-invocation work (in this order)**:
+
+1. **Closed care reports** (Phase 9.11): query GSI for `status=CLOSED AND closed_at < now-90d` (configurable per-org policy in future) → batch-delete + write to **`CareReportDeletionAudit`** entity (mirrors `FeedbackDeletionAudit` from TrailPulse).
+2. **Deleted-account PII scrub**: query GSI for `users` with `deleted_at < now-30d` → hard-delete remaining `USER#{id}` items, observations, subscriptions, devices. Audit-log to **`PIIDeletionAudit`**.
+3. **Photo orphan sweep** (S3): paginated S3 list under `orgs/{org_id}/...`; for each key, check if the referenced parent (care-report id, trail-system id, catalog id, user id) still exists in DynamoDB. If not, delete from S3 + invalidate CloudFront cache.
+4. **Belt-and-suspenders magic-link tokens**: scan items with `PK begins_with MLT#` and `ttl < now-300s` (only matters if DynamoDB TTL is delayed, which is rare).
+5. **Emit CloudWatch metrics**: `RetentionCleanup.{CareReports,PIIScrub,PhotoOrphans,MagicLinkTokens}.Deleted`.
+
+**New access patterns** (added to `api-dynamo/docs/ACCESS_PATTERNS.md`):
+
+- **AP-RC01**: closed-care-report cleanup query.
+- **AP-RC02**: deleted-user PII scrub query.
+- **AP-RC03**: photo orphan parent-existence check.
+
+**Pulumi infra additions (queued for implementation plan)**:
+
+- `EventBridgeScheduledLambda` ComponentResource: EventBridge rule + target + Lambda IAM role + CloudWatch log group (30-day retention per project standard).
+
+**CloudWatch alarms**:
+
+- Lambda failure → page.
+- Processed-count = 0 for 7 consecutive days → likely silent broken state; page.
+
+**Cost at 100K DAU**: 30 invocations/month × ~5 min × 512 MB = **4.6 GB-min/month** → ~$0.00 (free tier).
 
 **Acceptance Criteria**:
-- Lambda runs daily at 2 AM UTC
-- Alarms configured for failures
-- DLQ captures failed events
 
-**AI-Assisted Timeline**: 2 hours
+- `retention_cleanup_processor` Lambda runs daily at 03:00 UTC.
+- All four cleanup steps execute and emit metrics.
+- `CareReportDeletionAudit` and `PIIDeletionAudit` records written for every hard-delete.
+- CloudWatch log group created with 30-day retention.
+- AP-RC01–AP-RC03 documented in `ACCESS_PATTERNS.md`.
+
+**AI-Assisted Timeline**: 6 hours (Lambda + EventBridge rule + tests).
 
 ---
 
@@ -2146,7 +2106,7 @@ trail_systems = Table(
         "cover_photo_url": str,      # S3 URL
         "status": str,               # Current status (open, closed, etc.)
         "status_reason": str,        # Why this status
-        "status_tags": list,         # List of tag IDs (max 10)
+        "condition_tags": list,      # List of tag IDs (max 20)
         "status_updated_at": str,    # ISO timestamp
         "status_updated_by": str,    # user_id
         "visibility": str,           # public, organization, private
@@ -2380,7 +2340,7 @@ trail_system_history = Table(
 
 ## Phase 6: Tag-Based Status Organization
 
-**Objective**: Implement flexible status tag system (max 10 tags per organization)
+**Objective**: Implement a flexible **unified Tag entity** with a `tag_type` discriminator. The two flavors needed for MVP are `CONDITION` (max 20 default per org) and `CARE_REPORT_TYPE` (max 25 default per org, owned by Phase 9). Per-org caps are configurable via the new `TagConfig` entity.
 
 **Duration**: 3-5 days
 **Priority**: MEDIUM (enhances status management)
@@ -2388,81 +2348,150 @@ trail_system_history = Table(
 
 ---
 
-### Task 6.1: Create status_tags DynamoDB Table
+### Tag Architecture (applies to all `tag_type` values, today and future)
 
-**Objective**: Store customizable status tags for each organization
+All tags — `CONDITION`, `CARE_REPORT_TYPE`, and any future tag type — are **one `Tag` entity discriminated by `tag_type`**. Decided in plan `wse-did-alot-of-snuggly-volcano` (2026-04-26).
+
+**Identical schema across every `tag_type`** (no per-type optional fields, no extension maps): `tag_id` (UUID), `org_id`, `tag_type` (enum, immutable after creation), `name` (1–100), `description` (0–500, **required, may be empty string**), `color` (hex `#RRGGBB`), `is_active` (bool, soft-delete), `created_at`, `updated_at`, `created_by_user_id`, `version` (optimistic-lock counter). If a future tag type genuinely needs a unique field, it warrants a separate entity — never add a per-type optional column to `Tag`.
+
+**Single-table layout**: `PK = ORG#{org_id}, SK = TAG#{tag_type}#{tag_id}` (e.g. `TAG#CONDITION#abc-123`). A single `begins_with(TAG#)` query lists every tag for an org regardless of type; `begins_with(TAG#CONDITION#)` lists only condition tags. No new GSI is required.
+
+**Strict org isolation**: every tag and every `TagConfig` lives under `PK=ORG#{org_id}`. No GSI, list operation, or admin endpoint exposes a tag to a caller in a different organization. Cross-org access is a BOLA violation by definition; enforced at the route layer (`require_org_match`), the service layer (`_verify_tag_org`), and the data layer (PK-based partitioning).
+
+**Adding a new tag type** (5-step recipe, no new entity / no new repository / no new GSI):
+1. Add the new value to the `tag_type` enum.
+2. Add a hardcoded default cap in `_MAX_BY_TAG_TYPE: dict[TagType, int]` (e.g. `TagType.NEW_TYPE: 30`).
+3. Add a thin route module `routes/{new_type}_tags.py` with the four CRUD handlers; each delegates to the shared `TagsService` with the type fixed.
+4. (Optional) Seed a `TagConfig` default for the new type in the org-bootstrap flow.
+5. Add a doc row in `TAGS.md`, `ACCESS_PATTERNS.md`, `dynamodb-spec.md`, and the planning docs.
+
+---
+
+### Task 6.1: Define the unified `Tag` entity (single-table item under the org partition)
+
+**Objective**: Define the canonical `Tag` entity that both Phase 6 (`CONDITION`) and Phase 9 (`CARE_REPORT_TYPE`) write through.
 
 **Files to Modify**:
-- `infra/components/dynamodb.py` (add status_tags table)
+- `api-dynamo/src/packages/traillens_db/src/traillens_db/entities/tag.py` (new file replacing `condition_tag.py` + `type_tag.py`)
+- `infra/pulumi/...` (no per-type tables — all tags live in the existing single-table store; the legacy multi-table `condition_tags`/`type_tags` infra resources are dropped)
 
-**Table Schema**:
+**Entity schema** (identical across every `tag_type`):
 ```python
-status_tags = Table(
-    table_name="status_tags",
-    partition_key=Attribute(name="org_id", type="S"),
-    sort_key=Attribute(name="tag_id", type="S"),
-    attributes={
-        "tag_id": str,               # UUID
-        "org_id": str,
-        "name": str,                 # e.g., "winter", "maintenance"
-        "color": str,                # Hex color for UI display
-        "description": str,
-        "is_active": bool,
-        "created_at": str,
-        "created_by": str,
-    }
-)
+class TagEntity:
+    tag_id: str                 # UUID
+    org_id: str                 # tenancy scope; immutable
+    tag_type: TagType           # CONDITION | CARE_REPORT_TYPE; immutable after creation
+    name: str                   # 1–100 chars
+    description: str            # 0–500 chars; required, may be empty string
+    color: str                  # hex #RRGGBB
+    is_active: bool             # soft-delete; default True
+    created_at: str             # ISO8601
+    updated_at: str             # ISO8601
+    created_by_user_id: str     # captured from JWT subject at creation
+    version: int                # optimistic-lock counter
 ```
 
+**DynamoDB layout**: `PK=ORG#{org_id}, SK=TAG#{tag_type}#{tag_id}`. Co-located with the org's other adjacency-list children.
+
+**Per-type defaults** (live in `_MAX_BY_TAG_TYPE: dict[TagType, int]`):
+- `CONDITION`: default cap `20` (raised from 10 in the docs-mvp-backend-features pass). Default seeded tags: `Open`, `Closed`, `Caution`.
+- `CARE_REPORT_TYPE`: default cap `25` (owned by Phase 9). Default seeded tags: `Maintenance`, `Hazard`, `Tree-down`, `Erosion`, `Litter`, `Signage`, `Bridge-repair`.
+
 **Implementation Steps**:
-1. Define table schema
-2. Deploy table
-3. Add org-level constraint: max 10 active tags per org
-4. Create default tags for new organizations:
-   - "winter", "maintenance", "caution", "wet-conditions", "dry-conditions"
+1. Define the unified `TagEntity` and `TagType` enum in the shared `traillens_db` package.
+2. Implement a single `TagRepository` with `list_by_organization(org_id, tag_type, ...)`, `get_by_id(org_id, tag_type, tag_id)`, `create(entity)`, `update(...)`, `soft_delete(...)` — all using the `PK=ORG#{org_id}, SK=TAG#{tag_type}#{tag_id}` shape.
+3. Implement the `TagConfig` entity (Task 6.1.1) and per-org cap-resolution.
+4. Implement default-tag seeding for new orgs (one PutItem per default tag, per type).
 
 **Acceptance Criteria**:
-- Table created
-- Max 10 tags enforced
-- Default tags created
+- One `TagEntity` class; no `ConditionTagEntity` / `TypeTagEntity` remain.
+- One `TagRepository` class; no per-type repositories remain.
+- Default tags created on org bootstrap.
+
+**AI-Assisted Timeline**: 3 hours
+
+---
+
+### Task 6.1.1: Per-org `TagConfig` entity (configurable caps)
+
+**Objective**: Allow org-admins to override the per-type cap without a code deploy.
+
+**Entity schema**:
+```python
+class TagConfigEntity:
+    org_id: str
+    tag_type: TagType
+    max_count: int       # 1–500
+    created_at: str
+    updated_at: str
+    version: int
+```
+
+**DynamoDB layout**: `PK=ORG#{org_id}, SK=TAG_CONFIG#{tag_type}` (e.g. `TAG_CONFIG#CONDITION`). Co-located with the org's tags so a single `Query(PK=ORG#{org_id}, SK begins_with TAG_CONFIG#)` returns every cap config in one round-trip.
+
+**Cap resolution algorithm** (server-side, on every tag write):
+1. Read `TAG_CONFIG#{tag_type}` for the caller's org. In-memory cache eligible (60-second TTL); persists only across warm Lambda invocations of the same container.
+2. If the item exists → use `max_count` from it.
+3. If the item does not exist → fall back to the hardcoded default in `_MAX_BY_TAG_TYPE`.
+4. Count current active tags of this type via `Query(PK=ORG#{org_id}, SK begins_with TAG#{tag_type}#)` with a count-only projection.
+5. Reject the create with `409 Conflict` and error code `TAG_CAP_EXCEEDED` if `current_count >= max_count`.
+
+**Cap-lowering safety rule**: when `PUT /tag-config/{tag_type}` would set a `max_count` below the current active tag count, the server returns `409 Conflict` with error code `TAG_CAP_BELOW_CURRENT_USAGE`. The org-admin must first soft-delete enough tags to fit under the new cap.
+
+**Defaults seeding**: `TagConfig` items are created **lazily** — the first `PUT /tag-config/{tag_type}` creates the item. Until then the hardcoded default applies.
 
 **AI-Assisted Timeline**: 2 hours
 
 ---
 
-### Task 6.2: Implement Status Tag CRUD API Endpoints
+### Task 6.2: Implement Tag CRUD + Tag-Config API Endpoints
 
-**Objective**: Allow org-admins to manage tags
+**Objective**: Allow org-admins to manage tags and configure per-type caps.
 
 **Files to Modify**:
-- `api-dynamo/routes/status_tags.py` (new file)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/condition_tags.py` (new — handlers for `tag_type=CONDITION`)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/care_report_tags.py` (new — handlers for `tag_type=CARE_REPORT_TYPE`; replaces the legacy `/tags/care-report-types` route module)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/tag_config.py` (new — config GET + PUT)
+- `api-dynamo/src/lambdas/api_dynamo/src/api/services/tags_service.py` (rewritten — type-keyed methods that share a single `TagRepository`)
 
-**Endpoints**:
-1. `GET /status-tags` - List organization's tags
-2. `POST /status-tags` - Create new tag (check max 10 limit)
-3. `PUT /status-tags/{id}` - Update tag
-4. `DELETE /status-tags/{id}` - Delete tag (if not in use)
+**Endpoints** (10 total — 8 tag CRUD + 2 tag-config):
+
+CRUD on tags (eight routes, four per `tag_type`):
+1. `GET /api/organizations/{org_id}/condition-tags` — List condition tags. Auth: any org member.
+2. `POST /api/organizations/{org_id}/condition-tags` — Create condition tag (cap enforced via `TagConfig` resolution). Auth: org-admin.
+3. `PUT /api/organizations/{org_id}/condition-tags/{tag_id}` — Update (optimistic lock on `version`). Auth: org-admin.
+4. `DELETE /api/organizations/{org_id}/condition-tags/{tag_id}` — Soft-delete. Auth: org-admin.
+5. `GET /api/organizations/{org_id}/care-report-tags` — List care-report-type tags. Auth: any org member.
+6. `POST /api/organizations/{org_id}/care-report-tags` — Create care-report-type tag (cap enforced). Auth: org-admin.
+7. `PUT /api/organizations/{org_id}/care-report-tags/{tag_id}` — Update. Auth: org-admin.
+8. `DELETE /api/organizations/{org_id}/care-report-tags/{tag_id}` — Soft-delete. Auth: org-admin.
+
+Tag-config:
+9. `GET /api/organizations/{org_id}/tag-config` — List per-org cap configs (one row per `tag_type`; rows without an explicit override show the hardcoded default with `is_default=true`). Auth: any org member.
+10. `PUT /api/organizations/{org_id}/tag-config/{tag_type}` — Set per-org cap for a tag type. Body `{"max_count": int, "version": int}`. Auth: org-admin. Rejects with `TAG_CAP_BELOW_CURRENT_USAGE` if the new cap is below current active tag count.
 
 **Implementation Steps**:
-1. Implement CRUD endpoints
-2. Add validation for max 10 tags
-3. Prevent deletion of tags in use
-4. Add authorization (org-admin only)
-5. Write tests
+1. Implement the tag CRUD route modules (thin handlers that delegate to `TagsService`).
+2. Implement the tag-config route module.
+3. Implement cap enforcement (count-then-create per Task 6.1.1). **Net-new** — current `create_condition_tag`/`create_care_report_type_tag` do not enforce caps today.
+4. Add authorization (org-admin for write; any org member for read).
+5. Write tests covering cap enforcement, optimistic locking, BOLA prevention, and the cap-lowering safety rule.
 
 **Testing**:
-- Create tag
-- Try to create 11th tag (should fail)
-- Update tag color
-- Try to delete tag in use (should fail)
-- Delete unused tag
+- Create up to the cap; 21st condition tag (or 26th care-report tag) returns 409 `TAG_CAP_EXCEEDED`.
+- Update tag via optimistic lock; stale `version` returns 409.
+- Soft-delete tag; subsequent list excludes it.
+- `PUT /tag-config/CONDITION` sets cap to 30; create now allowed up to 30.
+- `PUT /tag-config/CONDITION` set to 5 with 12 active tags returns 409 `TAG_CAP_BELOW_CURRENT_USAGE`.
+- BOLA: caller in org A cannot read/write tags in org B (returns 403 with `BOLA_VIOLATION`).
 
 **Acceptance Criteria**:
-- CRUD operations functional
-- Max 10 limit enforced
-- Authorization working
+- 10 endpoints functional.
+- Cap enforcement (default and per-org override) working.
+- Optimistic locking working.
+- BOLA prevention verified.
 
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 6 hours
 
 ---
 
@@ -2477,7 +2506,7 @@ status_tags = Table(
 **Implementation Steps**:
 1. Update status update endpoint to accept tags array
 2. Validate tags exist and belong to organization
-3. Store tags in trail_systems.status_tags array
+3. Store tags in trail_systems.condition_tags array
 4. Record tag changes in history
 5. Add tag selector UI to status update modal
 6. Show current tags as filter chips
@@ -2551,10 +2580,10 @@ status_tags = Table(
 
 **Phase 6 Total Duration**: 3-5 days
 **Phase 6 Success Criteria**:
-- Status tags table created
+- Condition tags table created
 - CRUD API functional
 - Tag assignment working
-- Max 10 tags enforced
+- Max 20 tags enforced
 - Tag management UI complete
 
 ---
@@ -2693,28 +2722,11 @@ traillens-{env}-photos/
 
 ### Task 7.4: Implement Season Assignment
 
-**Objective**: Tag trail systems with seasons for scheduled closures
+**STATUS (docs-mvp-backend-features pass): NOT NEEDED — covered by `condition_tags`.**
 
-**Files to Modify**:
-- `api-dynamo/models/trail_system.py` (add seasons field)
-- `webui/src/features/trails/components/TrailSystemEdit.tsx` (add season selector)
+Season state is communicated via org-defined `condition_tags` (e.g. `Winter Closure`, `Spring Mud Season`). No dedicated season entity or routes. The catalog (Phase 7.5) can include season-themed entries that admins apply when seasons change. This avoids inventing a parallel taxonomy when the existing tag system already covers the use case.
 
-**Seasons**:
-- Spring, Summer, Fall, Winter
-- Custom seasons (e.g., "Mud Season", "Hunting Season")
-
-**Implementation Steps**:
-1. Add seasons array to trail_systems
-2. Allow multi-select (trail can be open multiple seasons)
-3. Display seasons on trail system card
-4. Filter trail systems by season
-
-**Acceptance Criteria**:
-- Seasons assignable
-- Multi-select working
-- Filter functional
-
-**AI-Assisted Timeline**: 4 hours
+**No code work required.** Doc-only resolution.
 
 ---
 
@@ -2788,28 +2800,9 @@ traillens-{env}-photos/
 
 ### Task 7.7: Create Status Type Templates for Onboarding
 
-**Objective**: Provide starter status types for new organizations
+**STATUS (docs-mvp-backend-features pass): DROPPED — not in MVP scope.**
 
-**Files to Modify**:
-- `api-dynamo/services/organization_service.py` (onboarding logic)
-
-**Default Status Types**:
-1. Open (green) - "Trails are open and maintained"
-2. Closed (red) - "Trails are closed to all users"
-3. Closed for Maintenance (orange) - "Temporary closure for trail work"
-4. Caution (yellow) - "Proceed with caution, conditions may be challenging"
-
-**Implementation Steps**:
-1. When new organization created, auto-create default status types
-2. Also create default tags: "winter", "maintenance", "wet"
-3. Add templates to organization settings for reference
-
-**Acceptance Criteria**:
-- New orgs get default statuses
-- Defaults editable
-- Templates documented
-
-**AI-Assisted Timeline**: 2 hours
+New orgs are not auto-seeded with starter catalog entries. The condition catalog (Phase 7.5) is org-curated from scratch. The earlier suggestion to seed new orgs from a curated default set is reverted. No code work required.
 
 ---
 
@@ -2818,10 +2811,123 @@ traillens-{env}-photos/
 - Status type management functional
 - Status update workflow complete
 - Two-level photo system working
-- Season assignment implemented
+- Season state covered by `condition_tags` (no dedicated season entity)
 - History with 2-year retention
 - Bulk updates functional
-- Status templates for onboarding
+- Onboarding starter-templates dropped (no auto-seed)
+
+---
+
+## Phase 7.5: Condition Catalog (Org-Scoped Preset Library)
+
+**Objective**: Provide an org-scoped library of curated **condition presets** that admins can apply with one click to set a trail-system's current condition. Presets carry a name, description, optional reference photo, color, and references to existing org `condition_tags`. The catalog reuses the existing `condition_tags` taxonomy as its tag source — no new tag entity.
+
+**Duration**: 3-5 days
+**Priority**: HIGH (core admin UX, drives Phase 7 update flow + Phase 15 TrailPulse feedback configuration)
+**Dependencies**: Phase 5 (trail systems exist), Phase 6 (`condition_tags` exist), Phase 7 (condition update flow exists), Phase 9 photo flow (S3 presigned-PUT pattern)
+
+**Files to Create**:
+
+- `api-dynamo/src/lambdas/api_dynamo/src/api/routes/condition_catalog.py` — 7 new routes under tag `condition-catalog`.
+- `api-dynamo/src/lambdas/api_dynamo/src/api/services/condition_catalog_service.py` — business logic.
+- `api-dynamo/src/packages/traillens_db/src/traillens_db/entities/condition_catalog_entry.py` — `ConditionCatalogEntry` entity.
+- `api-dynamo/src/packages/traillens_db/src/traillens_db/repositories/condition_catalog.py` — repository.
+- `api-dynamo/docs/CONDITION_CATALOG.md` — single-page reference doc (NEW).
+
+**Entity: `ConditionCatalogEntry`** (verbatim from source-plan spec):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `catalog_id` | UUID | PK component |
+| `org_id` | string | Tenancy scope |
+| `name` | string (1–80) | Display label, e.g. "Wet & rideable" |
+| `description` | string (0–500) | What this condition means; shown in picker |
+| `image_s3_key` | string \| null | Optional reference image (presigned upload, same flow as trail photos) |
+| `image_url` | string \| null (computed) | CloudFront URL derived from `image_s3_key` |
+| `condition_tag_ids` | list[string] (0–5) | References existing `condition_tags` (reused taxonomy) |
+| `condition_tag_names` | list[string] | Denormalized for read efficiency (mirrors `condition_observation` pattern) |
+| `color` | string (hex) | Display color; defaults to first tag's color if blank |
+| `is_active` | bool | Soft-disable without delete |
+| `created_by_user_id` | string | Who first created this entry |
+| `last_used_at` | string (ISO8601) \| null | For "recently used" sorting |
+| `usage_count` | int | Increment on `apply` (eventually-consistent) |
+| `created_at`, `updated_at`, `version` | standard | Optimistic-locking version field |
+
+**DynamoDB single-table layout** (to be added to `dynamodb-spec.md` and `DYNAMO_DATABASE_DESIGN.md`):
+
+```text
+PK: ORG#{org_id}
+SK: CATALOG#{catalog_id}
+
+GSI1 — list active by org, sorted by usage (catalog overload):
+  GSI1PK: ORG#{org_id}#CATALOG#ACTIVE
+  GSI1SK: USAGE#{usage_count_zero_padded}#CATALOG#{catalog_id}
+
+Tag-filter pattern (no new GSI needed):
+  Filter at the application layer by intersecting condition_tag_ids;
+  for >100 catalog entries per org consider a per-tag adjacency item later.
+```
+
+**GSI overloading note**: TrailLens single-table design intentionally overloads each GSI by entity type. GSI1 already serves `ORG#{id}` for org-member queries, `USER#{id}` for user-centric queries, `EMAIL#{email_lc}` for magic-link rate-limit queries. Adding `ORG#{id}#CATALOG#ACTIVE` is consistent with this pattern (different GSI1PK values per entity type — they never collide).
+
+**Endpoints (7 new + 1 modified)** — under tag `condition-catalog`:
+
+| Method + Path | Purpose | Auth/role |
+| --- | --- | --- |
+| `GET /api/organizations/{org_id}/condition-catalog` | List entries (paginated, filter by tag IDs, sort by `usage_count` / `last_used_at` / `name`) | Any org member |
+| `GET /api/organizations/{org_id}/condition-catalog/{catalog_id}` | Get one entry | Any org member |
+| `POST /api/organizations/{org_id}/condition-catalog` | Create entry directly (admin-curation flow — not the user save-to-catalog flow) | `trailsystem-status` or higher |
+| `PATCH /api/organizations/{org_id}/condition-catalog/{catalog_id}` | Update entry (optimistic locking via `version`) | `trailsystem-status` or higher |
+| `DELETE /api/organizations/{org_id}/condition-catalog/{catalog_id}` | Soft delete (sets `is_active=false`); hard delete restricted to `org-admin` | `trailsystem-status` (soft) / `org-admin` (hard) |
+| `POST /api/organizations/{org_id}/condition-catalog/upload-url` | Presigned S3 PUT for catalog image (S3 key: `orgs/{org_id}/catalog/{catalog_id}.jpg` + WebP variants, mirrors existing trail-photo flow) | `trailsystem-status` |
+| `POST /api/trail-systems/{trail_system_id}/condition/apply-catalog/{catalog_id}` | Apply a catalog entry as the current condition (allows per-call overrides for `name`, `color`, `description`, `image_s3_key`); updates denormalized fields on trail system, appends to history, fires SNS | `trailsystem-status` |
+
+**Modified existing endpoint:**
+
+- **`PATCH /api/trail-systems/{trail_system_id}/condition`** — add **two** optional fields:
+  1. **`catalog_entry_id`** (optional): when present, the server hydrates defaults from the catalog entry, then applies any explicit field overrides in the body.
+  2. **`save_to_catalog: bool`** (default `false`): when `true` AND the request did **not** reference an existing `catalog_entry_id`, the server creates a new catalog entry from the same payload in the same TransactWrite (per the user-facing UX: "create a new condition" with optional save-to-catalog checkbox).
+  - Backwards-compatible (existing free-form path with both flags omitted keeps working).
+
+**Save-to-catalog UX clarification**: there is **no** "copy from existing trail-system condition history" route. When a user creates a new condition (free-form or via `PATCH /condition`), the request body carries the optional `save_to_catalog: bool` flag. The catalog never gets seeded from past trail-system state.
+
+**Access patterns** (added to `api-dynamo/docs/ACCESS_PATTERNS.md`):
+
+| ID | Pattern | Index |
+| --- | --- | --- |
+| AP-CC01 | List active catalog entries by org, sortable by usage / recency / name | GSI1 (catalog-active) |
+| AP-CC02 | Get catalog entry by ID | Main table |
+| AP-CC03 | Filter catalog entries by `condition_tag_ids` (intersection) | App-layer filter on AP-CC01 |
+| AP-CC04 | Apply catalog entry to a trail system (transactional: trail system PATCH + history APPEND + catalog `usage_count` UPDATE + `last_used_at` UPDATE + SNS publish) | TransactWrite |
+| AP-CC05 | Create catalog entry from a `PATCH /condition` request that carries `save_to_catalog=true` (transactional: trail-system condition update + history APPEND + catalog PUT) | TransactWrite |
+| AP-CC06 | Update catalog entry (optimistic-lock on `version`) | UpdateItem with ConditionExpression |
+| AP-CC07 | Soft-delete catalog entry (sets `is_active=false`, removed from GSI1) | UpdateItem |
+
+(Note: there is **no AP-CC08** — the from-trail-system route was removed per source-plan correction F-Q.)
+
+**Implementation Steps**:
+
+1. Define `ConditionCatalogEntry` entity + repository + service (TDD; tests first per project standards).
+2. Add 7 new routes + 1 modified PATCH to `routes/condition_catalog.py` and update `routes/trail_systems.py`.
+3. Add the routes to `openapi.json` under tag `condition-catalog` (tag bump as part of `2.0.0` semver MAJOR version bump).
+4. Add GSI1 catalog overload spec to `dynamodb-spec.md` and `DYNAMO_DATABASE_DESIGN.md`.
+5. Add AP-CC01–AP-CC07 to `ACCESS_PATTERNS.md` with `Status: IMPLEMENTED ❌` initially.
+6. Reuse the existing presigned-S3-PUT + CloudFront-OAC photo flow (`s3_service.py`) for catalog images — same key/variant convention, new prefix `orgs/{org_id}/catalog/{catalog_id}.jpg` + WebP variants.
+7. Reuse the existing SNS `TRAIL_CONDITION_CHANGE` topic on apply-catalog; add `catalog_entry_id` and `catalog_entry_name` to the payload for richer push messages.
+8. Write unit + integration tests targeting 90% coverage per project standards.
+
+**Acceptance Criteria**:
+
+- 7 catalog routes + 1 modified PATCH live in openapi.json under tag `condition-catalog`.
+- `ConditionCatalogEntry` entity + repository + service implemented with TDD.
+- GSI1 catalog overload documented and queryable.
+- `save_to_catalog: bool` flag on `PATCH /condition` creates a catalog entry in a single TransactWrite.
+- `apply-catalog` endpoint atomically updates trail-system, appends history, increments usage_count, fires SNS.
+- AP-CC01–AP-CC07 documented with Status column.
+- Reference image S3 layout matches `orgs/{org_id}/catalog/{catalog_id}.jpg` + WebP variants.
+- 90%+ test coverage on the new service + routes.
+
+**AI-Assisted Timeline**: 14 hours (entity + repo + service + 7 routes + tests + docs).
 
 ---
 
@@ -2902,72 +3008,47 @@ scheduled_status_changes = Table(
 
 ---
 
-### Task 8.3: Implement Cron Job for Automated Processing
+### Task 8.3 + 8.4: Scheduled-Condition Processor + Reminder Dispatcher (Single Lambda — Architecture A)
 
-**Objective**: Lambda function to execute scheduled changes automatically
+**MERGED (docs-mvp-backend-features pass)**: Tasks 8.3 and 8.4 are collapsed into a single design. **One** Lambda (`scheduled_condition_processor`) handles **both** the fire path **and** the reminder dispatch in the same handler. There is no separate reminder-notification Lambda.
 
-**Files to Modify**:
-- `infra/lambda/process_scheduled_changes.py` (new Lambda)
-- `infra/components/lambda_crons.py` (schedule)
+**Architecture (verified, source-plan Section 11 Architecture A)**:
 
-**Cron Job Logic**:
-1. Run every 15 minutes
-2. Query scheduled_status_changes where scheduled_time <= now AND executed = false
-3. For each pending change:
-   - Update trail_system status
-   - Create history entry
-   - Mark schedule as executed
-   - Send notification to subscribers (if enabled)
-4. Log all executions to CloudWatch
+- **Trigger**: EventBridge scheduled rule, **`cron(0/15 * * * ? *)`** (every 15 minutes). User-facing accuracy ±15 minutes — acceptable for MVP. (If tighter is needed at scale, switch to per-item EventBridge Scheduler at >100 schedules/day.)
+- **New Lambda deployment package**: `scheduled_condition_processor` in `api-dynamo/src/lambdas/scheduled_condition_processor/`.
+- **Lambda spec**: Memory **256 MB**, timeout **60 s**, architecture **ARM64** (Graviton2, 20% cheaper).
 
-**Implementation Steps**:
-1. Create Lambda function
-2. Implement query and update logic
-3. Schedule to run every 15 minutes (EventBridge)
-4. Add error handling and retries
-5. Set up alarms for failures
-6. Test with synthetic data
+**Per-invocation work**:
 
-**Testing**:
-- Create scheduled change for 1 minute in future
-- Wait for cron to run
-- Verify status updated
-- Verify schedule marked as executed
-- Test failure handling
+1. Query DynamoDB **GSI4** (`GSI4PK=SCHEDULED#PENDING`, `GSI4SK <= now+5min`) — items due to fire in this window.
+2. For each due item: **TransactWrite** to (a) update trail-system denormalized condition fields, (b) append condition_history entry, (c) flip scheduled-condition `status=APPLIED, applied_at=now`. Publish SNS to `TRAIL_CONDITION_CHANGE` topic (reuses existing fanout).
+3. Query GSI4 again for items with `notify_before_minutes` set AND `scheduled_at - now <= notify_before_minutes` AND `reminder_sent=false` — send pre-fire reminder push via existing `notification_push` Lambda or direct SNS.
+4. Mark `reminder_sent=true` on those items.
+
+**New DynamoDB GSI**: **GSI4** (`GSI4PK = SCHEDULED#PENDING`, `GSI4SK = scheduled_at_iso8601`). When `status` flips to `APPLIED` or `CANCELLED`, the item is removed from GSI4 (via `GSI4PK = SCHEDULED#{status}`) so the processor doesn't re-process. Documented in `dynamodb-spec.md` and `DYNAMO_DATABASE_DESIGN.md`.
+
+**New access patterns**: AP-SC04 (query due-now), AP-SC05 (query reminder-window), AP-SC06 (mark applied/cancelled). Add to `ACCESS_PATTERNS.md`.
+
+**Pulumi infra additions (queued for implementation plan)**: `EventBridgeScheduledLambda` ComponentResource — EventBridge rule + target + Lambda IAM role + CloudWatch log group (30-day retention). IAM permissions for trail-system / scheduled-condition / history table writes + SNS publish.
+
+**CloudWatch alarms (recalibrated for 15-min interval — 1 invocation per 15-min window, 4/hour, 96/day)**:
+
+- `≥ 1 invocation failure in 30min` → catches a single failure on the next-tick retry; pages on first sustained failure since a missed fire = a missed user-visible condition update.
+- `processed-items-count > 100 per tick` for 2 consecutive ticks → indicates scheduled-condition queue buildup or a stuck cursor.
+- `0 invocations in 60min` → indicates EventBridge rule misconfigured or disabled (no-fire is invisible without this alarm).
+
+**Cost at 100K DAU** (recalculated for 15-min interval): 96 invocations/day × 30 = **2,880 invocations/month**, ~50ms avg = 2.4 GB-s/month → ~$0.00 (well inside free tier; ~3× cheaper than the original 5-min plan).
 
 **Acceptance Criteria**:
-- Cron runs every 15 minutes
-- Scheduled changes execute automatically
-- History created for automated changes
-- Error handling robust
 
-**AI-Assisted Timeline**: 8 hours
+- Single `scheduled_condition_processor` Lambda fires every 15 minutes.
+- Both fire AND reminder paths handled in the same handler.
+- GSI4 created and populated correctly.
+- AP-SC04–AP-SC06 documented.
+- CloudWatch alarms configured per the recalibrated thresholds.
+- User-facing UI copy in webui + admin app surfaces "applied within 15 minutes of <time>".
 
----
-
-### Task 8.4: Implement Reminder Notifications
-
-**Objective**: Notify admins before scheduled changes execute
-
-**Files to Modify**:
-- `infra/lambda/process_scheduled_changes.py` (add reminder logic)
-
-**Reminder Logic**:
-- Send email/SMS notification 24 hours before scheduled change
-- Include: trail system name, new status, scheduled time
-- Allow cancellation via link in email
-
-**Implementation Steps**:
-1. Query schedules where scheduled_time = now + 24 hours
-2. Send notification to trailsystem-crew members
-3. Include cancellation link
-4. Mark reminder as sent (add reminder_sent boolean to schema)
-
-**Acceptance Criteria**:
-- Reminder sent 24 hours before
-- Cancellation link working
-
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 8 hours (Lambda + GSI4 + EventBridge rule + tests).
 
 ---
 
@@ -3097,39 +3178,34 @@ trail_care_report_comments = Table(
 
 ---
 
-### Task 9.3: Create care_report_type_tags Table
+### Task 9.3: Add the `CARE_REPORT_TYPE` tag flavor (single unified `Tag` entity from Phase 6)
 
-**Objective**: Flexible categorization for reports (max 25 tags per org)
+**Objective**: Care reports can be categorized via tags of `tag_type=CARE_REPORT_TYPE`. **Reuses the unified `Tag` entity defined in Phase 6** — no new entity, no new repository, no new table. Default cap 25 per org (configurable via `TagConfig`).
 
 **Files to Modify**:
-- `infra/components/dynamodb.py` (add table)
+- (none — the `TagEntity` and `TagRepository` from Phase 6 already cover this flavor; the CRUD route module `care_report_tags.py` is created in Phase 6 Task 6.2 alongside `condition_tags.py`)
 
-**Table Schema**:
-```python
-care_report_type_tags = Table(
-    table_name="care_report_type_tags",
-    partition_key=Attribute(name="org_id", type="S"),
-    sort_key=Attribute(name="tag_id", type="S"),
-    attributes={
-        "tag_id": str,
-        "org_id": str,
-        "name": str,                 # e.g., "tree-down", "erosion", "hazard"
-        "color": str,
-        "description": str,
-        "is_active": bool,
-        "created_at": str,
-    }
-)
+**Persistence shape** (a `Tag` item with `tag_type=CARE_REPORT_TYPE`):
+
+```text
+PK: ORG#{org_id}
+SK: TAG#CARE_REPORT_TYPE#{tag_id}
+attributes: identical schema to every other tag — tag_id, org_id, tag_type, name,
+            color, description (required, may be empty), is_active, created_at,
+            updated_at, created_by_user_id, version
 ```
 
-**Default Tags**:
-- maintenance, hazard, tree-down, erosion, litter, signage, bridge-repair
+**Default seeded tags** (created during org bootstrap; same lazy-default pattern as `CONDITION` tags):
+- `Maintenance`, `Hazard`, `Tree-down`, `Erosion`, `Litter`, `Signage`, `Bridge-repair`
+
+**Per-org cap**: default `25`, configurable via `PUT /api/organizations/{org_id}/tag-config/CARE_REPORT_TYPE` (Phase 6 Task 6.1.1). Cap-resolution and cap-lowering safety rule are identical to other tag types.
 
 **Acceptance Criteria**:
-- Table created
-- Max 25 tags per org enforced
+- `Tag` items with `tag_type=CARE_REPORT_TYPE` queryable via `Query(PK=ORG#{org_id}, SK begins_with TAG#CARE_REPORT_TYPE#)`.
+- Default cap 25 enforced; raise/lower via `TagConfig`.
+- Default tags created on org bootstrap.
 
-**AI-Assisted Timeline**: 2 hours
+**AI-Assisted Timeline**: 0 hours (subsumed into Phase 6 Task 6.1 / 6.2 — no separate work)
 
 ---
 
@@ -3143,16 +3219,16 @@ care_report_type_tags = Table(
 - `api-dynamo/services/care_report_service.py` (business logic)
 
 **Endpoints**:
-1. `POST /care-reports` - Create report (authenticated)
-2. `GET /care-reports/{id}` - Get report details
-3. `PUT /care-reports/{id}` - Update report (crew only)
-4. `DELETE /care-reports/{id}` - Delete report (org-admin only)
-5. `GET /care-reports` - List reports (filter by status, priority, assignment)
-6. `PUT /care-reports/{id}/assign` - Assign to crew member
-7. `PUT /care-reports/{id}/status` - Update status
-8. `POST /care-reports/{id}/comments` - Add comment
-9. `GET /care-reports/{id}/comments` - Get all comments
-10. `GET /care-reports/{id}/activity` - Get activity log
+1. `POST /api/care-reports` - Create report (authenticated)
+2. `GET /api/care-reports/{id}` - Get report details
+3. `PUT /api/care-reports/{id}` - Update report (crew only)
+4. `DELETE /api/care-reports/{id}` - Delete report (org-admin only)
+5. `GET /api/care-reports` - List reports (filter by status, priority, assignment)
+6. `PUT /api/care-reports/{id}/assign` - Assign to crew member
+7. `PUT /api/care-reports/{id}/status` - Update status
+8. `POST /api/care-reports/{id}/comments` - Add comment
+9. `GET /api/care-reports/{id}/comments` - Get all comments
+10. **`GET /api/care-reports/{id}/activity`** — Aggregated activity feed (status changes, assignment changes, comments-as-activity, status-history). **Implementation (per docs-mvp-backend-features pass)**: single `Query(PK=CAREREPORT#{id}, SK begins_with anything)` reads care-report core + comments + assignment-history + status-history items already co-located under that PK; service merges them into a chronological feed. No new entity, no extra writes. New access pattern **AP-CR14** added to `ACCESS_PATTERNS.md`.
 
 **Authorization Rules**:
 - Regular users: Can create public reports, view own reports
@@ -3214,49 +3290,60 @@ care_report_type_tags = Table(
 
 ### Task 9.6: Implement Public/Private Visibility Flag
 
-**Objective**: Control who can see reports
+**Objective**: Control who can see reports via an explicit `is_public` flag.
 
-**Visibility Rules**:
-- **Public Reports**: Viewable by anyone (authenticated users)
-- **Private Reports**: Viewable only by organization members (crew-only work logs)
+**Schema additions (docs-mvp-backend-features pass)**:
+
+- **openapi.json**: add `is_public: bool` (default `false`) to care-report request schema and response schema, and to the `photos` array's parent object.
+- **Pydantic model** (`api-dynamo/src/lambdas/api_dynamo/src/api/routes/care_reports.py`): add `is_public: bool = Field(default=False)`.
+- **DynamoDB entity** (`CareReportEntity`): add `is_public: bool` column.
+
+**Visibility-gating semantics**:
+
+- When `is_public=true`: any authenticated user (not just org members) can list and get the report.
+- When `is_public=false`: only org members can list and get the report.
+
+**Query semantics for `GET /api/care-reports`**:
+
+- Org members: see all reports for their org regardless of `is_public`.
+- Non-org-members: see only `is_public=true` reports.
 
 **Implementation Steps**:
-1. Add is_public field to reports
-2. Filter queries based on user role:
-   - Regular users: Only see public reports
-   - Org members: See public + private reports for their org
-3. Add "Make Private" checkbox for crew when creating report
-4. Default to public for user submissions, private for crew work logs
+1. Add `is_public` field to openapi schema + Pydantic model + DynamoDB entity.
+2. Filter queries in `care_reports_service.py` based on caller's org membership:
+   - Org members: no `is_public` filter applied.
+   - Non-members: `FilterExpression: is_public = :true`.
+3. Add "Make Private" checkbox for crew when creating report (UI side; default to public for user submissions, private for crew work logs).
+4. Document gating in `api-dynamo/docs/API_DESIGN.md`.
 
 **Acceptance Criteria**:
-- Public reports visible to all
-- Private reports visible only to org members
-- Visibility toggle working
+- `is_public` field present in openapi schema, Pydantic model, and DynamoDB entity.
+- Visibility-gating semantics enforced server-side in list and get endpoints.
+- Default value `false` (private) when unspecified.
 
-**AI-Assisted Timeline**: 2 hours (included in Task 9.4)
+**AI-Assisted Timeline**: 4 hours (included in Task 9.4 implementation).
 
 ---
 
-### Task 9.7: Implement Type Tag Management
+### Task 9.7: Care-Report-Type Tag Management UI
 
-**Objective**: Allow org-admin to manage report type tags (max 25 per org)
+**Objective**: Allow org-admin to manage care-report-type tags (default cap 25 per org; configurable via `TagConfig` per Phase 6 Task 6.1.1).
 
 **Files to Modify**:
-- `api-dynamo/routes/care_report_type_tags.py` (new file)
-- `webui/src/features/organization/pages/OrganizationSettings.tsx` (add Type Tags tab)
+- `webui/src/features/organization/pages/OrganizationSettings.tsx` (add Care Report Tags tab)
 
-**Implementation Steps**:
-1. Implement CRUD API for type tags
-2. Enforce max 25 tags per org
-3. Create UI for managing type tags
-4. Auto-create default tags for new orgs
+**Implementation Notes**:
+- The CRUD API for `tag_type=CARE_REPORT_TYPE` is delivered in Phase 6 Task 6.2 (route module `routes/care_report_tags.py`, handlers delegate to the shared `TagsService`). No new backend work for tag CRUD here.
+- The cap (default 25) is enforced server-side via the unified cap-resolution algorithm (`TagConfig` lookup → hardcoded fallback → count active tags → reject on breach).
+- Default tags are seeded on org bootstrap (Phase 6 Task 6.1).
+- The UI calls `GET/POST/PUT/DELETE /api/organizations/{org_id}/care-report-tags` (renamed from `/tags/care-report-types` in the docs-mvp-backend-features pass).
 
 **Acceptance Criteria**:
-- CRUD operations functional
-- Max 25 tags enforced
-- Tag management UI complete
+- CRUD UI functional against the unified `Tag` API for `tag_type=CARE_REPORT_TYPE`.
+- Cap (default 25 or org override) surfaced in the UI.
+- Cap-lowering safety rule (`TAG_CAP_BELOW_CURRENT_USAGE`) surfaced inline when an admin tries to lower the cap below current usage.
 
-**AI-Assisted Timeline**: 4 hours
+**AI-Assisted Timeline**: 2 hours (UI only; backend delivered in Phase 6)
 
 ---
 
@@ -3323,28 +3410,37 @@ care_report_type_tags = Table(
 
 ### Task 9.10: Implement Multiple Photo Upload (Max 5)
 
-**Objective**: Allow up to 5 photos per report
+**Objective**: Allow up to 5 photos per report. Schema-enforced via openapi `maxItems: 5` AND server-side validation.
+
+**Schema enforcement (docs-mvp-backend-features pass)**:
+
+- **openapi.json**: add `maxItems: 5` to the photo upload request schema AND to the care-report response `photos` array.
+- **Server-side validation** (`care_reports_service.py`): if a `POST /api/care-reports/{id}/photos` request would cause the total count to exceed 5, return **400 Bad Request** with a clear error message (`{"error": "max_photos_exceeded", "message": "A care report may have at most 5 photos."}`).
 
 **Implementation Steps**:
-1. Update photo upload endpoint to accept array of photos
-2. Validate max 5 photos per report
-3. Store photos in S3: `care-reports/{report_id}/{photo_id}.jpg`
-4. Add photo URLs to report record
-5. Implement photo deletion
-6. Create photo upload UI component with preview
-7. Add photo captions (optional)
+1. Update photo upload endpoint to accept array of photos.
+2. **Validate max 5 photos per report (server-side)**: count existing photos + incoming photos before write; reject with 400 if total > 5.
+3. Add `maxItems: 5` to openapi.json on both request and response schemas.
+4. Store photos in S3: `care-reports/{report_id}/{photo_id}.jpg`.
+5. Add photo URLs to report record.
+6. Implement photo deletion (frees a slot for another upload).
+7. Create photo upload UI component with preview.
+8. Add photo captions (optional).
 
 **Testing**:
-- Upload 1 photo
-- Upload 5 photos
-- Try to upload 6th photo (should fail)
-- Delete photo
+- Upload 1 photo.
+- Upload 5 photos (one request).
+- Upload 5 photos in 5 separate requests (one at a time).
+- Try to upload 6th photo (should fail with 400).
+- Try to upload 3 photos when 4 already exist (should fail with 400 — would exceed 5).
+- Delete a photo, then upload another (should succeed — 4 + 1 = 5).
 
 **Acceptance Criteria**:
-- Max 5 photos enforced
-- Photos upload to S3
-- Preview working
-- Deletion functional
+- openapi schema declares `maxItems: 5` on both request and response photo arrays.
+- Server-side validation returns 400 when the write would exceed 5.
+- Photos upload to S3.
+- Preview working.
+- Deletion functional.
 
 **AI-Assisted Timeline**: 6 hours
 
@@ -3352,27 +3448,29 @@ care_report_type_tags = Table(
 
 ### Task 9.11: Implement Status-Based Retention Policy
 
-**Objective**: Active reports kept indefinitely, closed/cancelled deleted after 2 years
+**Objective**: Active reports kept indefinitely; closed care-reports scrubbed after 90 days. **Cross-link to Task 4.4 / Section 11 Architecture B** — the actual scrubbing is done by the `retention_cleanup_processor` Lambda, NOT by per-request logic in this task.
 
-**Retention Policy**:
-- **Active Reports** (Open, In Progress, Deferred, Resolved): Kept indefinitely
-- **Closed/Cancelled Reports**: 2-year retention, then deleted
-- **Photos**: 180 days after report closure, then deleted from S3
+**Retention Policy (docs-mvp-backend-features pass)**:
+
+- **Active Reports** (Open, In Progress, Deferred, Resolved): Kept indefinitely.
+- **Closed Reports**: scrubbed by the `retention_cleanup_processor` Lambda (Task 4.4) after **90 days** (configurable per-org policy in future). Audit-logged to **`CareReportDeletionAudit`** entity.
+- **Photos**: photo orphan sweep performed by the same Lambda — any S3 key whose parent care-report is gone is deleted.
 
 **Implementation Steps**:
-1. Add TTL logic to data retention Lambda (from Phase 4)
-2. Query closed/cancelled reports older than 2 years
-3. Delete reports and associated comments
-4. Delete photos from S3 for reports closed > 180 days
-5. Log all deletions to CloudWatch
+
+1. Confirm closed-care-report cleanup is implemented in the `retention_cleanup_processor` Lambda (Task 4.4 + Architecture B step #1).
+2. Confirm `CareReportDeletionAudit` entity exists in `DYNAMO_DATABASE_DESIGN.md` and `dynamodb-spec.md`.
+3. Document the 90-day window in `api-dynamo/docs/CONDITION_CATALOG.md` adjacents and in `api-dynamo/docs/BACKGROUND_WORKERS.md`.
+4. Document the configurability hook (per-org `closed_care_report_retention_days` field on the Organization entity) — deferred to a future PR; default to 90 today.
 
 **Acceptance Criteria**:
-- Active reports never deleted
-- Closed reports deleted after 2 years
-- Photos deleted 180 days after closure
-- Audit logging complete
 
-**AI-Assisted Timeline**: 4 hours
+- Closed care-reports scrubbed after 90 days by the daily Lambda (not per-request logic).
+- Audit log written to `CareReportDeletionAudit` for every deletion.
+- Photo orphan sweep deletes S3 keys whose parent care-report is gone.
+- 90-day window documented; configurability hook noted for future work.
+
+**AI-Assisted Timeline**: 0 hours additional (logic lives in Task 4.4 Lambda).
 
 ---
 
@@ -3645,28 +3743,36 @@ subscriptions = Table(
 )
 ```
 
-**API Endpoints**:
-1. `POST /subscriptions` - Subscribe to trail system or organization
-2. `DELETE /subscriptions/{id}` - Unsubscribe
-3. `GET /subscriptions` - Get user's subscriptions
+**API Endpoints (canonical paths per docs-mvp-backend-features pass — under existing `users` tag, no new service facade)**:
+
+1. **`POST /api/users/me/subscriptions`** — Subscribe to trail system. Body: `{trail_system_id}`. (AP-SUB01)
+2. **`GET /api/users/me/subscriptions`** — List the authenticated user's subscriptions. (AP-SUB02)
+3. **`DELETE /api/users/me/subscriptions/{trailsystem_id}`** — Unsubscribe from a trail system. (AP-SUB03)
+
+Access patterns AP-SUB01–AP-SUB03 already exist in `api-dynamo/docs/ACCESS_PATTERNS.md` (verified at lines 196–198) using `USER#{user_id}` + `SUBSCRIPTION#{trailsystem_id}`. The new route shape matches the existing access-pattern shape — no new patterns needed.
 
 **Implementation Steps**:
-1. Create subscriptions table
-2. Implement API endpoints
-3. Add "Subscribe" button on trail system pages
-4. Query subscribers when sending notifications
-5. Respect subscription preferences
+
+1. Add the three routes under the `users` tag in `openapi.json`.
+2. Create `subscriptions_service.py` (new file under `api-dynamo/src/lambdas/api_dynamo/src/api/services/`).
+3. Add "Subscribe" button on trail-system pages in webui + both mobile apps.
+4. Query subscribers when sending notifications.
+5. Respect subscription + notification preferences (Task 10.5).
 
 **Testing**:
-- Subscribe to trail system
-- Verify notification received when status changes
-- Unsubscribe
-- Verify notification not received
+
+- Subscribe to trail system.
+- Verify notification received when status changes.
+- Unsubscribe.
+- Verify notification not received.
+- Confirm pagination on the LIST endpoint works for users with >50 subscriptions.
 
 **Acceptance Criteria**:
-- Subscription CRUD functional
-- Notifications sent to subscribers only
-- Subscribe/unsubscribe UI working
+
+- All three routes documented in openapi under `users` tag.
+- Subscription CRUD functional.
+- Notifications sent to subscribers only.
+- Subscribe/unsubscribe UI working in webui + admin app + user app.
 
 **AI-Assisted Timeline**: 6 hours
 
@@ -3680,29 +3786,37 @@ subscriptions = Table(
 - `api-dynamo/models/user.py` (add notification_preferences)
 - `webui/src/features/user/pages/NotificationSettings.tsx` (new page)
 
-**Preference Options**:
-- **Channels**: Email, SMS, Push (checkboxes for each)
-- **Types**: Status changes, Care reports, Events, Forums
-- **Frequency**: Immediate, Daily digest, Weekly summary
-- **Quiet Hours**: Don't send notifications during specified times
+**Preference Options (docs-mvp-backend-features pass — 2-axis matrix)**:
 
-**User Preferences Schema**:
+- **Channels (top-level on/off)**: Email, SMS, Push (checkboxes for each — global gate per channel).
+- **Events × Channels (matrix)**: each of the **6 event types** below has independent per-channel toggles (email, sms, push):
+
+  1. `condition_change` — trail-system condition changed.
+  2. `care_report_created` — new care report submitted on a subscribed trail system.
+  3. `care_report_assigned` — a care report was assigned to me.
+  4. `care_report_comment` — new comment on a care report I'm watching.
+  5. `scheduled_condition_reminder` — pre-fire reminder for a scheduled condition change.
+  6. `observation_received` — a new condition observation submitted on a subscribed trail system.
+
+- **Quiet Hours**: don't send notifications during specified times (per-user start/end + timezone).
+
+**User Preferences Schema (docs-mvp-backend-features pass — 2-axis matrix replacing the legacy nested-by-channel shape)**:
+
 ```json
 {
   "notification_preferences": {
-    "email": {
-      "enabled": true,
-      "status_changes": true,
-      "care_reports": false,
-      "frequency": "immediate"
+    "channels": {
+      "email": true,
+      "sms": false,
+      "push": true
     },
-    "sms": {
-      "enabled": false
-    },
-    "push": {
-      "enabled": true,
-      "status_changes": true,
-      "care_reports": true
+    "events": {
+      "condition_change":              { "email": true,  "sms": false, "push": true  },
+      "care_report_created":           { "email": true,  "sms": false, "push": true  },
+      "care_report_assigned":          { "email": true,  "sms": true,  "push": true  },
+      "care_report_comment":           { "email": false, "sms": false, "push": true  },
+      "scheduled_condition_reminder":  { "email": false, "sms": false, "push": true  },
+      "observation_received":          { "email": false, "sms": false, "push": false }
     },
     "quiet_hours": {
       "start": "22:00",
@@ -3712,6 +3826,10 @@ subscriptions = Table(
   }
 }
 ```
+
+**Resolution rule (server-side dispatch)**: a notification is delivered on channel X for event E **iff** `channels.X == true` AND `events.E.X == true` AND not in quiet hours.
+
+**Endpoints**: `GET /api/users/me/notification-preferences` and `PATCH /api/users/me/notification-preferences` (existing routes; openapi schema is rewritten in this pass to the 2-axis shape above). Notifications service (`notifications_service.py`) is rewritten to consult the matrix per dispatch.
 
 **Implementation Steps**:
 1. Add notification_preferences to users table
@@ -3984,12 +4102,25 @@ subscriptions = Table(
 - Timeline: Recent activity
 
 **Implementation Steps**:
-1. Use Tremor charting components (built on Recharts) per webui/ tech stack
-2. Implement analytics API endpoints
-3. Create chart components
-4. Implement date range selector
-5. Add export to CSV functionality
-6. Ensure mobile responsive
+1. Use Tremor charting components (built on Recharts) per webui/ tech stack.
+2. Implement the **8 dedicated `/api/.../analytics/*` routes** (per docs-mvp-backend-features pass — Section 8 row #10). All routes under new openapi tag **`analytics`**. Each route returns pre-aggregated data only — never raw rows. All routes accept `start_date`, `end_date` query params; bucketed routes also accept `bucket=day|week|month`. **AuthZ matrix detailed below.** New access patterns **AP-AN01–AP-AN08**.
+
+   - **AP-AN01** — `GET /api/organizations/{org_id}/analytics/overview` — Org-Admin landing-page snapshot: total trail systems, active care-reports count by priority (P1–P5), total users, total subscriptions, last-30d activity count. AuthZ: `org-admin`+.
+   - **AP-AN02** — `GET /api/organizations/{org_id}/analytics/trail-systems` — status-change frequency, average time in each condition. Bucketed. AuthZ: `org-admin`+.
+   - **AP-AN03** — `GET /api/organizations/{org_id}/analytics/care-reports` — count by priority, by status, by type-tag, average resolution time. Bucketed. AuthZ: `org-admin`+ for whole org; `trailsystem-crew` may filter by trail system.
+   - **AP-AN04** — `GET /api/organizations/{org_id}/analytics/users` — total, 30d-active, subscriptions count, notification engagement (sent / opened / clicked). AuthZ: `org-admin`+.
+   - **AP-AN05** — `GET /api/organizations/{org_id}/analytics/activity-feed` — paginated timeline of status changes + care-report updates + comments + new observations across the whole org. Cursor-paginated, no aggregation. AuthZ: any authenticated org member (rows are filtered by membership).
+   - **AP-AN06** — `GET /api/organizations/{org_id}/analytics/export` — CSV export. Query params: `metric=trail-systems|care-reports|users|activity`, plus date range. Returns `text/csv` with appropriate `Content-Disposition`. AuthZ: `org-admin`+.
+   - **AP-AN07** — `GET /api/trail-systems/{ts_id}/analytics/condition-history` — per-trail-system condition timeline with peak-usage times. Bucketed. AuthZ: `trailsystem-owner`+.
+   - **AP-AN08** — `GET /api/trail-systems/{ts_id}/analytics/views` — view counts per trail system over time. Requires view-tracking; flag for implementation plan as a dependency (likely a small writes-only `VIEW#{ts_id}#{date}` rollup updated by a non-blocking middleware on `GET /trail-systems/{id}`). AuthZ: `trailsystem-owner`+.
+
+3. **Backed by daily DynamoDB rollups** written by the `retention_cleanup_processor` Lambda (Task 4.4 / Architecture B is extended to also compute rollups). Rollup entity: `ANALYTICS_ROLLUP#{org_id}#{metric}#{date}`. Each analytics route reads rollups, never raw rows.
+4. Create chart components.
+5. Implement date range selector.
+6. Add export to CSV functionality (AP-AN06 endpoint above).
+7. Ensure mobile responsive.
+
+**Trail-Crew and Regular-User dashboards** (Phase 11.1) compose from existing endpoints (`/care-reports?assignee=me`, `/users/me/subscriptions`, etc.) — no additional analytics routes needed for them.
 
 **Testing**:
 - View analytics page
@@ -4091,6 +4222,19 @@ subscriptions = Table(
 - Remove working correctly
 
 **AI-Assisted Timeline**: 8 hours
+
+---
+
+### Task 11.x: Password-Reset UI (Webui — Deferred)
+
+**STATUS (docs-mvp-backend-features pass): Deferred backup-auth UX work for webui Phase 11.**
+
+Implement password-reset UI in webui (uses Cognito `ForgotPassword` / `ConfirmForgotPassword` directly, client-side via the Cognito SDK). **Deferred from this docs pass; api-dynamo does not expose forgot-password in MVP** (per Section 9 of the source plan / Task 3.4 above). Recorded here so the work doesn't get lost.
+
+- Implementation: webui-side only; talks directly to Cognito.
+- No api-dynamo route involved.
+- Triggered from the existing password login screen (a "Forgot password?" link).
+- AI-Assisted Timeline: ~6 hours (deferred; not counted in MVP totals).
 
 ---
 
@@ -5153,7 +5297,7 @@ subscriptions = Table(
 **Priority**: **MVP-REQUIRED** (user condition feedback is critical for trail management decisions)
 **Dependencies**: Phases 5 (Trail System Model), 10 (Notifications), 12 (Mobile Apps for GPS)
 
-**MVP Scope Note**: The MVP implements the **condition observation subset** of TrailPulse: 6 API endpoints for user-submitted condition observations, admin observation management (view/acknowledge/close/delete), and observation summary aggregation. GPS geofencing, ride detection, post-ride notifications, crew management, and frequency-based questions are deferred to post-MVP.
+**MVP Scope Note (docs-mvp-backend-features pass — REVISED)**: The MVP implements the **full 25 TrailPulse backend endpoints** (5 mobile + 2 web + 8 admin-config + 10 admin-feedback). Math: 8 mobile (original) − 2 ride start/end (mobile-local per F-AA) − 1 GET ride-count (mobile-local per F-BB) − 1 device-token (consolidated to `/api/users/me/devices` per F-CC) + 1 new `PUT /ride-completion` = **5 mobile**. iOS client deferred. Earlier "6 endpoints / 22 deferred" framing is superseded.
 
 ### Overview
 
@@ -5165,13 +5309,13 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 - Data-driven trail management decisions
 - Privacy-first design with easy opt-out
 
-**Scope for This Repo:**
-- Backend API endpoints (28 new endpoints)
-- DynamoDB schema (10 new tables)
+**Scope for This Repo (docs-mvp-backend-features pass — REVISED)**:
+- Backend API endpoints (**25 endpoints**: 5 mobile + 2 web + 8 admin-config + 10 admin-feedback)
+- DynamoDB schema (**9 entity types** in single-table overlay; `TrailConditions` dropped per design overlap with Condition Catalog Phase 7.5; `RideEvents` dropped per privacy-first redesign)
 - Web feedback submission form
 - Admin configuration interface
 - Admin feedback management interface
-- SNS integration for push notifications
+- **No** SNS push notification topic for post-ride feedback (mobile-local per F-Y); existing SNS used only for cross-user / admin events
 
 **Mobile Team Scope (Separate Repository):**
 - GPS tracking and geofence detection
@@ -5181,146 +5325,140 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 
 ---
 
-### Task 15.1: Implement TrailPulse DynamoDB Schema
+### Task 15.1: Implement TrailPulse DynamoDB Schema (9 Entity Types — Privacy-First, Catalog-Driven)
 
-**Objective**: Create 10 DynamoDB tables for TrailPulse data
+**Objective**: Define **9 entity types** in the single-table overlay for TrailPulse data. **`TrailConditions` is dropped** per design overlap with Condition Catalog Phase 7.5 (per-trail-system feedback config now references `catalog_id`s instead of a standalone TrailConditions entity). **`RideEvents` is dropped** per privacy-first redesign (the backend never sees per-user ride records).
 
-**Tables to Create:**
+**The 9 entity types:**
 
-1. **TrailConditions** - Condition options per trail system
-   - PK: `trail_system_id`
-   - Attributes: condition_name, is_multiselect, display_order, is_enabled
-
-2. **AdditionalQuestions** - Custom questions per trail system
-   - PK: `trail_system_id#question_id`
+1. **AdditionalQuestions** — Custom questions per trail system.
+   - PK: `TRAILSYSTEM#{trail_system_id}`, SK: `QUESTION#{question_id}`
    - Attributes: question_text, question_type, options, frequency_threshold, is_enabled, display_order
 
-3. **RideEvents** - Entry/exit timestamps with 90-day TTL
-   - PK: `user_id#ride_id`
-   - SK: `timestamp`
-   - Attributes: trail_system_id, entry_time, exit_time, entry_coords, exit_coords
-   - TTL attribute: 90 days from exit_time
-   - GSI: trail_system_id (for aggregation queries)
+2. **TrailSystemRideCount** — **Anonymous daily aggregate** (no user attribution).
+   - PK: `TRAILSYSTEM#{trail_system_id}`, SK: `RIDECOUNT#{YYYY-MM-DD}`
+   - Attributes: `total_rides` (atomic counter via `ADD`)
+   - **TTL**: `now + 1095 days` (3-year retention per user direction). Long-term storage for analytics.
 
-4. **FeedbackResponses** - User responses to conditions and questions
-   - PK: `trail_system_id#feedback_id`
-   - SK: `timestamp`
-   - Attributes: user_id, ride_id, conditions, question_responses, comments, soft_deleted, deleted_at, deleted_by, deletion_reason
-   - GSI: user_id (for user feedback history)
+3. **RideCompletion** — **Anonymous idempotency marker**.
+   - PK: `TRAILSYSTEM#{trail_system_id}`, SK: `RIDECOMPLETION#{ride_id}`
+   - Attributes: `completed_at` only (no `user_id`, no `org_id` reverse lookup).
+   - **TTL**: `now + 30 days` (short — only needed long enough to dedupe legitimate replays from offline-queued requests).
+   - Co-located with the trail-system PK so the TransactWrite is a single-partition op.
 
-5. **UsageCounts** - Aggregated ride counts per trail system
-   - PK: `trail_system_id#date`
-   - Attributes: total_rides, unique_users, aggregated_at
+4. **FeedbackResponses** — User responses to conditions and questions.
+   - PK: `TRAILSYSTEM#{trail_system_id}`, SK: `FEEDBACK#{created_at}#{feedback_id}`
+   - GSI1: `USER#{user_id}` for user feedback history (admins manage feedback per Tasks 15.5/15.9).
+   - Attributes: `user_id`, `conditions[]` (catalog_id refs), `question_responses[]`, `comments`, `soft_deleted`, `deleted_at`, `deleted_by`, `deletion_reason`.
+   - **No `ride_id` field** — backend has no per-user ride records per F-AA/BB; mobile keeps any local ride↔feedback linkage in its own Room DB.
 
-6. **UserPreferences** - GPS opt-out and notification settings
-   - PK: `user_id`
-   - Attributes: gps_tracking_enabled, feedback_notifications_enabled, device_tokens
+5. **UserPreferences** — GPS opt-out and notification settings.
+   - PK: `USER#{user_id}`, SK: `TRAILPULSE_PREFS`
+   - Attributes: `gps_tracking_enabled`, `feedback_notifications_enabled`.
+   - (Device tokens live in the existing `users/me/devices` entity, not here.)
 
-7. **QuestionResponseTracker** - Count responses to trigger frequency logic
-   - PK: `user_id#trail_system_id#question_id`
-   - Attributes: response_count, last_asked_at
+6. **QuestionResponseTracker** — Count responses to trigger frequency logic.
+   - PK: `USER#{user_id}#TRAILSYSTEM#{trail_system_id}`, SK: `QUESTION#{question_id}`
+   - Attributes: `response_count`, `last_asked_at`.
 
-8. **TrailSystemGeofences** - Boundary coordinates for each trail system
-   - PK: `trail_system_id`
-   - Attributes: geojson_boundaries, last_updated_at, updated_by
+7. **TrailSystemGeofences** — Boundary coordinates for each trail system.
+   - PK: `TRAILSYSTEM#{trail_system_id}`, SK: `GEOFENCE`
+   - Attributes: `geojson_boundaries`, `last_updated_at`, `updated_by`.
 
-9. **CrewMembers** - Crew member status for feedback context
-   - PK: `trail_system_id#user_id`
-   - Attributes: is_crew, crew_notes, assigned_at, assigned_by
-   - GSI: user_id (for user's crew memberships)
+8. **CrewMembers** — Crew member status for feedback context.
+   - PK: `TRAILSYSTEM#{trail_system_id}`, SK: `CREW#{user_id}`
+   - GSI1: `USER#{user_id}` for user's crew memberships.
+   - Attributes: `is_crew`, `crew_notes`, `assigned_at`, `assigned_by`.
 
-10. **FeedbackDeletionAudit** - Audit log for deleted feedback
-    - PK: `feedback_id`
-    - SK: `deleted_at`
-    - Attributes: deleted_by, deletion_reason, was_soft_delete
+9. **FeedbackDeletionAudit** — Audit log for deleted feedback.
+   - PK: `FEEDBACK#{feedback_id}`, SK: `DELETED#{deleted_at}`
+   - Attributes: `deleted_by`, `deletion_reason`, `was_soft_delete`.
+
+**Per-trail-system feedback config (replaces the dropped `TrailConditions` entity)**: the `PUT /api/trailpulse/admin/trail-systems/{id}/conditions` endpoint stores an array of `{catalog_id, display_order, is_multiselect}` against the trail system. Single source of truth for "what conditions exist": the org `ConditionCatalogEntry` library (Phase 7.5).
+
+**Single-partition TransactWrite for ride completion** (atomicity guarantee, 1 WCU effective):
+
+1. `Put RIDECOMPLETION#{ride_id}` with `ConditionExpression: attribute_not_exists(SK)` (idempotency — duplicate ride_id aborts the txn cleanly with `ConditionalCheckFailed`, server returns 200 OK no-op).
+2. `Update RIDECOUNT#{today}` with `ADD total_rides :one`.
+
+**Implications for analytics**: per-trail-system daily totals are queryable for 3 years. **Unique-users-per-day is no longer derivable** from ride records (no user attribution at all). If the analytics dashboard wants "unique users", derive from distinct `FeedbackResponses.user_id` per day.
 
 **Implementation Steps:**
-1. Define Pulumi DynamoDB table resources in `infra/`
-2. Configure TTL on RideEvents table (90 days)
-3. Set up GSI indexes for querying
-4. Configure read/write capacity (on-demand mode)
-5. Deploy tables to dev environment
-6. Verify table creation and indexes
-7. Run integration tests
+
+1. Define DynamoDB single-table-overlay entities for all 9 types in `traillens_db`.
+2. Configure TTL: 30 days on `RideCompletion`, 1095 days (3 years) on `TrailSystemRideCount`.
+3. Set up GSI1 overloads for `FeedbackResponses` (user-history) and `CrewMembers` (user-memberships).
+4. Configure on-demand capacity.
+5. Deploy schema; verify creation and TTL config.
+6. Run integration tests for the single-partition TransactWrite (ride-completion).
 
 **Acceptance Criteria**:
-- All 10 tables created in DynamoDB
-- TTL configured on RideEvents (90-day expiration)
-- GSI indexes functional
-- Tables accessible from Lambda functions
+
+- 9 entity types created (NOT 10 — `TrailConditions` and `RideEvents` dropped).
+- TTL: 30 days on `RideCompletion`; 1095 days on `TrailSystemRideCount`.
+- GSI1 overloads functional for user-history and user-memberships.
+- Single-partition TransactWrite proven idempotent (duplicate `ride_id` returns no-op success).
+- No `user_id` field on any ride-tracking entity (privacy-first verified).
+- Per-trail-system feedback config references `catalog_id`s only (no embedded condition definitions).
 
 **AI-Assisted Timeline**: 8 hours
 
 ---
 
-### Task 15.2: Implement Mobile App API Endpoints (8 Endpoints)
+### Task 15.2: Implement Mobile App API Endpoints (5 Endpoints — Privacy-First)
 
-**Objective**: Create backend APIs for mobile app GPS and feedback integration
+**Objective**: Create backend APIs for mobile feedback integration. **5 endpoints (was 8)** after the F-AA / F-BB / F-CC corrections.
 
-**Endpoints to Implement:**
+**Endpoints to Implement (5):**
 
-1. `POST /api/trailpulse/rides/start`
-   - Body: `{ user_id, trail_system_id, entry_coords, timestamp }`
-   - Validates subscription, validates coords within geofence
-   - Creates RideEvent record
-   - Returns: `{ ride_id, success }`
-
-2. `POST /api/trailpulse/rides/end`
-   - Body: `{ ride_id, exit_coords, timestamp }`
-   - Updates RideEvent with exit data
-   - Increments UsageCounts
-   - Triggers SNS push notification
-   - Returns: `{ success, feedback_link }`
-
-3. `GET /api/trailpulse/geofences`
-   - Query params: `user_id` (gets subscribed trail systems)
-   - Returns geofence boundaries for user's subscribed trail systems only
+1. **`GET /api/trailpulse/geofences`** — geofence boundaries for the authenticated user's subscribed trail systems (mobile downloads once, matches on-device).
    - Returns: `{ trail_system_id, geojson_boundaries }[]`
 
-4. `GET /api/trailpulse/trail-systems/{id}/feedback-config`
-   - Returns trail conditions and questions for feedback form
-   - Checks question frequency logic for user
-   - Returns: `{ conditions, additional_questions[] }`
+2. **`GET /api/trailpulse/trail-systems/{id}/feedback-config`** — conditions (catalog-id refs) + questions for the feedback form. Checks question frequency logic for user.
+   - Returns: `{ conditions: [{catalog_id, display_order, is_multiselect}, ...], additional_questions[] }`
 
-5. `POST /api/trailpulse/feedback`
-   - Body: `{ ride_id, trail_system_id, conditions[], question_responses[], comments }`
-   - Creates FeedbackResponse record
-   - Updates QuestionResponseTracker
+3. **`POST /api/trailpulse/feedback`** — submit feedback (conditions[], question_responses[], comments). User-attributed for admin management per Tasks 15.5/15.9.
+   - Body: `{ trail_system_id, conditions[], question_responses[], comments }` (**no `ride_id`** — backend doesn't track rides per F-AA/BB)
+   - Creates FeedbackResponse record + updates QuestionResponseTracker.
    - Returns: `{ success, feedback_id }`
 
-6. `GET /api/trailpulse/user/ride-count/{trail_system_id}`
-   - Returns user's total ride count for trail system
-   - Returns: `{ ride_count, last_ride_date }`
+4. **`PUT /api/trailpulse/trail-systems/{trail_system_id}/ride-completion`** — **anonymous** ride-completion ping (NEW, replaces removed `/rides/start` and `/rides/end`).
+   - Body: `{ ride_id: <client-uuid>, completed_at: <iso8601> }`
+   - **Idempotent**: `ride_id` is the dedupe key (single-partition TransactWrite with `attribute_not_exists(SK)`).
+   - **Auth**: any authenticated user (membership check required so we don't accept rides for trail systems the user isn't subscribed to, but the user's identity is **not stored** in the ride-completion record).
+   - On success, single-partition TransactWrite: (a) put `RIDECOMPLETION#{ride_id}` marker with TTL=now+30d; (b) `ADD total_rides :one` on `RIDECOUNT#{YYYY-MM-DD}` with TTL=now+1095d.
+   - Returns: `{ success: true }` (200 on first call, 200 no-op on duplicate).
 
-7. `PUT /api/trailpulse/user/preferences`
+5. **`PUT /api/trailpulse/user/preferences`** — GPS-tracking-enabled, feedback-notifications-enabled (this **is** user-scoped — preferences belong to the user).
    - Body: `{ gps_tracking_enabled, feedback_notifications_enabled }`
-   - Updates UserPreferences
    - Returns: `{ success }`
 
-8. `POST /api/trailpulse/device-token`
-   - Body: `{ user_id, device_token, platform }`
-   - Stores device token in UserPreferences
-   - Registers with SNS platform endpoint
-   - Returns: `{ success, endpoint_arn }`
+**REMOVED endpoints (with rationale):**
+
+- ~~`POST /api/trailpulse/rides/start`~~ — mobile-only via geofence entry detection (F-AA).
+- ~~`POST /api/trailpulse/rides/end`~~ — mobile-only via geofence exit detection; local notification per F-Y.
+- ~~`GET /api/trailpulse/user/ride-count/{trail_system_id}`~~ — mobile keeps any "you've ridden here N times" UX in local Room DB only (F-BB privacy-first).
+- ~~`POST /api/trailpulse/device-token`~~ — duplicate of existing `/api/users/me/devices` route (F-CC); single canonical device-registration route used for ALL push paths.
 
 **Implementation Steps:**
-1. Create Lambda handlers in `api-dynamo/` for each endpoint
-2. Implement input validation and authentication
-3. Implement geofence validation logic
-4. Implement ride counting and aggregation
-5. Configure API Gateway routes
-6. Add endpoint documentation
-7. Write unit tests for each endpoint
-8. Integration testing with Postman/Thunder Client
+
+1. Create Lambda handlers in `api-dynamo/` for each of the 5 endpoints.
+2. Implement input validation and authentication.
+3. Implement subscription/membership check on `PUT /ride-completion` (without storing user identity in the record).
+4. Configure API Gateway routes.
+5. Add endpoint documentation.
+6. Write unit tests for each endpoint.
+7. Integration testing with focus on the anonymous ride-completion idempotency path.
 
 **Acceptance Criteria**:
-- All 8 mobile endpoints functional
-- Authentication required on all endpoints
-- Geofence validation working correctly
-- Usage counts aggregating properly
-- Push notifications triggered on ride end
 
-**AI-Assisted Timeline**: 16 hours
+- All 5 mobile endpoints functional.
+- Authentication required on all endpoints.
+- `PUT /ride-completion` is idempotent (duplicate `ride_id` returns success no-op).
+- No `user_id` written to `RIDECOMPLETION` or `TRAILSYSTEMRIDECOUNT` items (verified via DynamoDB inspection in tests).
+- No `/rides/start`, `/rides/end`, `/user/ride-count`, or `/device-token` route exists (verified by openapi.json scan).
+
+**AI-Assisted Timeline**: 12 hours
 
 ---
 
@@ -5432,29 +5570,70 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 
 ---
 
-### Task 15.6: Implement SNS Push Notification Triggers
+### Task 15.6: Implement Local Post-Ride Notification (Mobile) — REWRITTEN per F-Y
 
-**Objective**: Send push notifications on ride end
+**Objective**: Fire the post-ride feedback notification **locally on the mobile device** when the on-device geofence detects ride-end. **This is mobile-app scope, NOT backend scope** (per docs-mvp-backend-features pass F-Y).
 
-**Implementation Steps:**
-1. Extend existing SNS infrastructure for TrailPulse
-2. Retrieve device token from UserPreferences on ride end
-3. Format notification payload:
-   - Title: "How were the trails today?"
-   - Body: Trail system name
-   - Deeplink: `traillens://feedback/{ride_id}`
-4. Send notification via SNS → APNS
-5. Handle notification failures gracefully (log, don't block)
-6. Respect user notification preferences
-7. Test notification delivery on iOS devices
+**ARCHITECTURE CORRECTION**: The previous "Implement SNS Push Notification Triggers" framing over-specified this. **No SNS topic. No backend dispatcher Lambda. No FCM round-trip.** Android `NotificationCompat` + `NotificationManagerCompat` post local notifications client-side with deeplink-bearing `PendingIntent`.
+
+**Why local-notification is strictly better for this use case:**
+
+| Dimension | Server-side push (old design) | Local notification (this design) |
+| --- | --- | --- |
+| Latency | 200ms–2s (FCM round-trip) | < 50ms (immediate) |
+| Cost | SNS publish + Lambda invoke per ride | $0 |
+| Offline behaviour | Push delayed until next sync | Fires immediately |
+| Cross-device delivery | All registered devices | Only the device on the ride (correct UX) |
+| Backend dependency | Required for notification path | None |
+| Failure mode | Push API can fail | Local API doesn't fail in normal operation |
+
+**Why this works on Android (the only client platform in MVP scope):**
+
+- Ride detection requires GPS, which requires a foreground service with `foregroundServiceType="location"`. By definition, the app process is alive at ride-end.
+- Android keeps `location`-typed foreground services alive over Doze mode and App Standby. If the user force-stopped the app, ride-end wasn't detected at all — neither local nor server notification can help.
+
+**APIs (Android):**
+
+```text
+NotificationCompat.Builder(context, channelId)
+  .setSmallIcon(R.drawable.ic_traillens)
+  .setContentTitle("How were the trails today?")
+  .setContentText(trailSystemName)
+  .setContentIntent(deeplinkPendingIntent)  // Intent.ACTION_VIEW + Uri.parse("traillens://feedback/{ride_id}")
+  .build()
+
+NotificationManagerCompat.from(context).notify(notificationId, notification)
+```
+
+**Permissions / setup the mobile app must handle:**
+
+- `POST_NOTIFICATIONS` runtime permission on Android 13+ (API 33+). Request once, at first run.
+- `NotificationChannel` registration on Android 8+ (API 26+). Channel ID: `trailpulse_post_ride`, importance: `IMPORTANCE_DEFAULT`.
+- `PendingIntent` flags: `FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE`.
+
+**Opt-out**: mobile reads the same `UserPreferences.feedback_notifications_enabled` field synced from `PUT /api/trailpulse/user/preferences` (Task 15.2 endpoint #5). If `false`, skip the local notify call.
+
+**What stays server-side**: `POST /api/users/me/devices` (existing route, renamed from `/api/devices`) is still used for OTHER push paths (admin notifications, scheduled-condition fires, care-report assignments). The dispatcher for ride-end specifically is gone.
+
+**What gets removed (verified vs source plan):**
+
+- ~~`TRAILPULSE_RIDE_END` SNS topic~~ — drop.
+- ~~Server-side dispatcher logic in `rides/end` handler~~ — N/A; `/rides/end` was removed entirely per F-AA.
+- ~~SNS-publish failure-handling around the dispatcher~~ — drop.
 
 **Acceptance Criteria**:
-- Push notifications sent on ride end
-- Notification includes deeplink
-- Failures logged but don't block ride recording
-- User preferences respected (opt-out works)
 
-**AI-Assisted Timeline**: 6 hours
+- Mobile app fires local notification within 50ms of geofence-detected ride-end.
+- Notification deeplink opens the in-app feedback form for `{ride_id}`.
+- `feedback_notifications_enabled=false` suppresses the local notification.
+- No backend SNS topic created for ride-end.
+- iOS deferred (`UNUserNotificationCenter` mirrors this pattern when iOS work resumes).
+
+**AI-Assisted Timeline**: 4 hours (mobile-side only; was 6 hours backend).
+
+Sources:
+
+- [Android Notifications overview — NotificationCompat / NotificationManagerCompat](https://developer.android.com/develop/ui/views/notifications)
 
 ---
 
@@ -5593,51 +5772,56 @@ TrailPulse is a privacy-first trail feedback and usage tracking system that enab
 
 ---
 
-### Task 15.10: Implement Usage Counting and Aggregation
+### Task 15.10: Implement Usage Counting (Inline TransactWrite — NO Aggregator Lambda) — REWRITTEN per F-AA
 
-**Objective**: Accurate trail usage metrics
+**Objective**: Maintain per-trail-system daily ride aggregates with **zero background Lambda work**. Counts are updated inline by the new `PUT /api/trailpulse/trail-systems/{ts_id}/ride-completion` TransactWrite.
+
+**ARCHITECTURE CORRECTION (F-AA)**: The original design queried `RideEvents` nightly to build `UsageCounts` rollups. Since `RideEvents` is dropped (backend doesn't see rides) and `TrailSystemRideCount` is updated inline by the `PUT /ride-completion` TransactWrite, **no aggregator Lambda is required**. `trailpulse_usage_aggregator` is dropped from the new-Lambdas list.
+
+**How counting actually works (verified, source-plan Section 11 Architecture C.1)**:
+
+- Each `PUT /ride-completion` call performs a single-partition TransactWrite:
+  1. `Put RIDECOMPLETION#{ride_id}` with `attribute_not_exists(SK)` (idempotency).
+  2. `Update RIDECOUNT#{today_iso_date}` with `ADD total_rides :one`.
+- `TRAILSYSTEMRIDECOUNT` items have a 3-year TTL (1095 days) — long enough that historical analytics queries can read directly from these items without any rollup step.
+- **Privacy-first note**: `TRAILSYSTEMRIDECOUNT` carries no user attribution. Unique-users-per-day is **not** derivable from ride records; if dashboards want unique-user signals, derive from distinct `FeedbackResponses.user_id` per day (which IS user-attributed per Tasks 15.5/15.9 admin requirements).
 
 **Implementation Steps:**
-1. Implement ride counting logic in ride end handler
-2. Deduplicate entries/exits within 10-minute window
-3. Aggregate counts daily:
-   - Total rides per trail system
-   - Unique users per trail system
-   - Store in UsageCounts table
-4. Create background Lambda for aggregation (cron job)
-5. Query usage data for admin dashboard
-6. Build usage analytics UI:
-   - Daily/weekly/monthly usage counts
-   - Trend graphs over time
-   - Export usage data (CSV)
-7. Test accuracy with simulated rides
+
+1. Confirm the `PUT /ride-completion` handler uses a single-partition TransactWrite with the two operations above.
+2. Confirm `RIDECOUNT#{date}` items are written with TTL=now+1095d.
+3. Document the inline-aggregation pattern in `api-dynamo/docs/BACKGROUND_WORKERS.md` and `dynamodb-spec.md`.
+4. Add admin analytics queries that read directly from `RIDECOUNT#{date}` items (no aggregator lookup).
 
 **Acceptance Criteria**:
-- Usage counts accurate (no duplicates)
-- Daily aggregation running automatically
-- Usage stats visible to trail system owners
-- Export functionality working
 
-**AI-Assisted Timeline**: 10 hours
+- No `trailpulse_usage_aggregator` Lambda exists.
+- Counts update on every `PUT /ride-completion` call atomically.
+- Daily totals queryable for 3 years.
+- Unique-users-per-day documented as derived from `FeedbackResponses.user_id`, not from ride records.
+
+**AI-Assisted Timeline**: 0 hours additional (logic lives in the Task 15.2 `PUT /ride-completion` handler).
 
 ---
 
-### Task 15.11: Implement Data Retention and TTL
+### Task 15.11: Implement Data Retention and TTL — REVISED per F-AA / F-BB privacy-first redesign
 
-**Objective**: Auto-delete ride events after 90 days
+**Objective**: Auto-expire short-lived ride-tracking entities. **`RideEvents` is dropped** per privacy-first redesign (the backend never sees per-user ride records).
 
 **Implementation Steps:**
-1. Configure DynamoDB TTL on RideEvents table
-2. Set TTL attribute to 90 days from exit_time
-3. Verify automatic deletion working
-4. Ensure aggregated usage counts preserved
-5. Document retention policy in privacy policy
+
+1. Configure DynamoDB TTL on **`RideCompletion`** items: `now + 30 days` (idempotency markers — only needed long enough to dedupe legitimate replays from offline-queued requests).
+2. Configure DynamoDB TTL on **`TrailSystemRideCount`** items: `now + 1095 days` (3-year retention per user direction; long-term storage for analytics).
+3. Verify automatic deletion working for both entity types.
+4. Ensure `FeedbackResponses` retained indefinitely (no TTL).
+5. Document retention policy in privacy policy.
 
 **Acceptance Criteria**:
-- RideEvents automatically deleted after 90 days
-- Aggregated counts remain indefinitely
-- Feedback responses retained indefinitely
-- TTL working correctly in prod
+
+- `RideCompletion` items automatically deleted after 30 days.
+- `TrailSystemRideCount` items automatically deleted after 3 years.
+- `FeedbackResponses` retained indefinitely.
+- TTL working correctly in prod.
 
 **AI-Assisted Timeline**: 2 hours
 
@@ -5938,7 +6122,7 @@ Several phases can run in parallel to optimize timeline:
 #### **Week 5: Status System Foundation (Feb 17-23)**
 - **Phase 6**: Tag-Based Status Organization COMPLETE (Day 1-2)
 - **Phase 7**: Status Management START (Day 3-7)
-- **Deliverables**: Tag system working (max 10 per org), status API endpoints live
+- **Deliverables**: Tag system working (max 20 per org), status API endpoints live
 - **Milestone**: M5 - Tag-Based Organization Complete
 
 #### **Week 6: Status & Reports Start (Feb 24 - Mar 2)**
@@ -6004,7 +6188,7 @@ Several phases can run in parallel to optimize timeline:
 | M2        | Feb 2, 2026  | Security Hardening Complete                                                 | CloudTrail (1-year), WAF, secrets rotation (180-day), incident response plan, API rate limiting                   |
 | M3        | Feb 9, 2026  | Authentication System Complete                                              | Passkey (inherently MFA) + magic link + email/password working, admin MFA enforced for password logins           |
 | M4        | Feb 16, 2026 | Trail System Data Model Complete                                            | DynamoDB entity types implemented (7-table multi-table per ADR-001), trail system CRUD APIs working                                                       |
-| M5        | Feb 23, 2026 | Tag-Based Organization Complete                                             | Max 10 status tags per org, tag CRUD working                                                                      |
+| M5        | Feb 23, 2026 | Tag-Based Organization Complete                                             | Max 20 condition tags per org, tag CRUD working                                                                   |
 | M6        | Mar 9, 2026  | Status Management Complete                                                  | Status types, history, photos, bulk updates, scheduled changes working                                            |
 | M7        | Mar 16, 2026 | Trail Care Reports Complete                                                 | P1-P5 reports, type tags (max 25), assignments, comments, photo uploads working                                   |
 | M8        | Mar 23, 2026 | Notification System Complete                                                | Email (SES), SMS (Pinpoint), Push (SNS→FCM + SNS→APNS), subscriptions, preferences working                                  |
@@ -6121,7 +6305,8 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - [ ] Monthly automated cleanup job running (DynamoDB TTL + Lambda)
 
 #### **5. Trail System Data Model (Phase 5)**
-- [ ] DynamoDB entity types implemented (7-table multi-table per ADR-001; single-table design documented with 16 entity types and 5 overloaded GSIs for scale target)
+- [ ] DynamoDB entity types implemented — **Status: PRODUCTION**: 7-table multi-table design per ADR-001 (current production reality at <500 DAU, optimized for cost)
+- [ ] DynamoDB entity types documented — **Status: TARGET (post-100K-DAU)**: single-table design with 16 entity types and 5 overloaded GSIs (documented future-scale design; migration deferred until DynamoDB costs exceed $100/month or traffic reaches 10K DAU). The two designs are **complementary**, not contradictory: production runs multi-table today; single-table is the documented forward path.
 - [ ] Trail System CRUD APIs working (create, read, update, delete)
 - [ ] Trail System edit history tracking (5-year retention)
 - [ ] Legacy trail data migrated to trail system model
@@ -6129,7 +6314,7 @@ The MVP is considered **functionally complete** when ALL of the following requir
 - [ ] Seed data loaded for pilot organizations (Hydrocut Trail System + GORBA)
 
 #### **6. Tag-Based Status Organization (Phase 6)**
-- [ ] Max 10 status tags per organization enforced
+- [ ] Max 20 condition tags per organization enforced
 - [ ] Tag CRUD working (create, edit, delete, reorder)
 - [ ] Tag assignment to trail systems working
 - [ ] Default tags created for new organizations (Open, Closed, Caution)
@@ -6318,7 +6503,7 @@ When these criteria are met, the executive team will approve **MVP v1.13 public 
 
 | Version | Date       | Author             | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |---------|------------|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1.0     | 2026-01-17 | Product Management | Initial comprehensive MVP implementation plan created. Detailed all 14 phases with 85+ tasks covering: Brand Messaging Update, Security Hardening (CloudTrail 1-year, WAF, secrets 180-day rotation, MFA), Authentication System (passkey, magic link, email/password), PII Protection (2-year retention), Trail System Data Model (21 DynamoDB tables), Tag-Based Status Organization (max 10 tags), Status Management (7 types, photos, history), Scheduled Status Changes, Trail Care Reports (P1-P5, type tags max 25, assignments, comments, offline support), Notification System (email/SMS/push), Web Dashboards (8 roles), iPhone Apps (User + Admin, offline queue), Pilot Onboarding (Hydrocut + GORBA), Testing and Validation. Includes dependencies matrix, critical path analysis (74-110 days), timeline (16-week roadmap), success criteria (functional, performance, quality, pilot requirements), and AI-assisted development impact (1.8x productivity gain). Target launch: Q2 2026 (April-May). |
+| 1.0     | 2026-01-17 | Product Management | Initial comprehensive MVP implementation plan created. Detailed all 14 phases with 85+ tasks covering: Brand Messaging Update, Security Hardening (CloudTrail 1-year, WAF, secrets 180-day rotation, MFA), Authentication System (passkey, magic link, email/password), PII Protection (2-year retention), Trail System Data Model (21 DynamoDB tables), Tag-Based Status Organization (max 20 tags), Status Management (7 types, photos, history), Scheduled Status Changes, Trail Care Reports (P1-P5, type tags max 25, assignments, comments, offline support), Notification System (email/SMS/push), Web Dashboards (8 roles), iPhone Apps (User + Admin, offline queue), Pilot Onboarding (Hydrocut + GORBA), Testing and Validation. Includes dependencies matrix, critical path analysis (74-110 days), timeline (16-week roadmap), success criteria (functional, performance, quality, pilot requirements), and AI-assisted development impact (1.8x productivity gain). Target launch: Q2 2026 (April-May). |
 | 1.1     | 2026-03-27 | Product Management | V4 Update: (1) Android apps replace iOS as first mobile priority — both platforms now in MVP. Android User App (36 screens, Kotlin 2.0+/Compose/MD3/Hilt) and Admin App (42 screens) with Figma-driven design. iOS as parallel track with same level of detail. (2) DynamoDB updated from 21-table multi-table to single-table design documentation (16 MVP entity types, 5 overloaded GSIs, 78 access patterns). Current production: 7-table per ADR-001. (3) web/ deprecated, replaced by webui/ greenfield rewrite (React 19 + TypeScript + Vite 6.x + Tailwind CSS 4.x + shadcn/ui + Tremor + Zustand 5.x + React Query 5.x). (4) Push notifications updated for both FCM (Android) and APNS (iOS). (5) Phase 12 duration 30-50 days. (6) All web/src/*.jsx references updated to webui/src/features/*.tsx. |
 
 ---
